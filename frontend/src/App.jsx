@@ -9,6 +9,9 @@ import Clientes from "./pages/Clientes";
 import Agenda from "./pages/Agenda";
 import Jurisprudencia from "./pages/Jurisprudencia";
 import IAPreditiva from "./pages/IAPreditiva";
+import DashboardFinanceiro from "./pages/DashboardFinanceiro";
+import Lancamentos from "./pages/Lancamentos";
+import ContasExtrato from "./pages/ContasExtrato";
 
 function PrivateRoute({ children }) {
   const { token } = useAuth();
@@ -29,6 +32,9 @@ export default function App() {
           <Route path="agenda" element={<Agenda />} />
           <Route path="jurisprudencia" element={<Jurisprudencia />} />
           <Route path="ia" element={<IAPreditiva />} />
+          <Route path="financeiro" element={<DashboardFinanceiro />} />
+          <Route path="financeiro/lancamentos" element={<Lancamentos />} />
+          <Route path="financeiro/contas" element={<ContasExtrato />} />
         </Route>
       </Routes>
     </BrowserRouter>

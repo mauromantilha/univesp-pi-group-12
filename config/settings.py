@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'agenda',
     'jurisprudencia',
     'ia_preditiva',
+    'financeiro',
 ]
 
 MIDDLEWARE = [

@@ -9,6 +9,7 @@ const nav = [
   { to: "/agenda", icon: "📅", label: "Agenda" },
   { to: "/jurisprudencia", icon: "📚", label: "Jurisprudência" },
   { to: "/ia", icon: "🤖", label: "IA Preditiva" },
+  { to: "/financeiro", icon: "💰", label: "Financeiro" },
 ];
 
 export default function Layout() {
