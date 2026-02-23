@@ -84,7 +84,6 @@ export default function DashboardFinanceiro() {
       </div>
     );
 
-  const kpis = data?.kpis || {};
   const grafico = data?.grafico_6_meses || [];
 
   return (
@@ -115,32 +114,30 @@ export default function DashboardFinanceiro() {
         <KPICard
           icon="💳"
           label="Saldo Total"
-          value={fmtBRL(kpis.saldo_total)}
+          value={fmtBRL(data?.saldo_total)}
           color="blue"
           onClick={() => navigate("/financeiro/contas")}
         />
         <KPICard
           icon="📈"
           label="A Receber"
-          value={fmtBRL(kpis.total_a_receber)}
+          value={fmtBRL(data?.a_receber_mes)}
           color="green"
-          subtitle={`${kpis.qtd_a_receber || 0} lançamento(s)`}
-          onClick={() => navigate("/financeiro/lancamentos?tipo=receita&status=pendente")}
+          onClick={() => navigate("/financeiro/lancamentos?tipo=receber")}
         />
         <KPICard
           icon="📉"
           label="A Pagar"
-          value={fmtBRL(kpis.total_a_pagar)}
+          value={fmtBRL(data?.a_pagar_mes)}
           color="red"
-          subtitle={`${kpis.qtd_a_pagar || 0} lançamento(s)`}
-          onClick={() => navigate("/financeiro/lancamentos?tipo=despesa&status=pendente")}
+          onClick={() => navigate("/financeiro/lancamentos?tipo=pagar")}
         />
         <KPICard
           icon="⚠️"
           label="Atrasados"
-          value={fmtBRL(kpis.total_atrasado)}
+          value={fmtBRL(data?.atrasados_valor)}
           color="yellow"
-          subtitle={`${kpis.qtd_atrasados || 0} lançamento(s)`}
+          subtitle={`${data?.atrasados_count || 0} lançamento(s)`}
           onClick={() => navigate("/financeiro/lancamentos?status=atrasado")}
         />
       </div>
@@ -162,36 +159,24 @@ export default function DashboardFinanceiro() {
               Ver todos →
             </button>
           </div>
-          {(kpis.proximos_vencimentos || []).length === 0 ? (
-            <p className="text-sm text-gray-400">Nenhum vencimento próximo</p>
-          ) : (
-            <ul className="space-y-2">
-              {(kpis.proximos_vencimentos || []).slice(0, 5).map((l) => (
-                <li
-                  key={l.id}
-                  className="flex justify-between items-start text-sm border-b border-gray-100 pb-2"
-                >
-                  <div>
-                    <div className="font-medium text-gray-800">{l.descricao}</div>
-                    <div className="text-xs text-gray-500">{l.cliente_nome || l.categoria_nome}</div>
-                  </div>
-                  <div className="text-right shrink-0 ml-2">
-                    <div
-                      className={`font-semibold text-sm ${
-                        l.tipo === "receita" ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      {l.tipo === "receita" ? "+" : "-"}
-                      {fmtBRL(l.valor)}
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      {new Date(l.data_vencimento + "T00:00:00").toLocaleDateString("pt-BR")}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-green-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-green-600 font-medium">Receitas do Mês</div>
+              <div className="text-lg font-bold text-green-700 mt-1">{fmtBRL(data?.receitas_mes)}</div>
+            </div>
+            <div className="bg-red-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-red-600 font-medium">Despesas do Mês</div>
+              <div className="text-lg font-bold text-red-700 mt-1">{fmtBRL(data?.despesas_mes)}</div>
+            </div>
+          </div>
+          <div className="mt-4">
+            <button
+              onClick={() => navigate("/financeiro/lancamentos")}
+              className="w-full text-sm text-center text-primary-600 hover:text-primary-700 font-medium py-2 border border-primary-200 rounded-lg hover:bg-primary-50 transition-colors"
+            >
+              Ver todos os lançamentos →
+            </button>
+          </div>
         </div>
       </div>
     </div>

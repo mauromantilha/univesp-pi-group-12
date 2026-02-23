@@ -53,6 +53,7 @@ function ModalNovo({ onClose, onSaved, categorias, contas }) {
     try {
       await api.post("/financeiro/lancamentos/", {
         ...form,
+        tipo: form.tipo === "receita" ? "receber" : "pagar",
         valor: parseFloat(form.valor.replace(",", ".")),
         processo: form.processo || null,
         conta_bancaria: form.conta_bancaria || null,
@@ -179,8 +180,8 @@ function ModalBaixa({ lancamento, contas, onClose, onSaved }) {
           <div className="bg-gray-50 rounded-lg p-3 text-sm">
             <div className="font-medium text-gray-800">{lancamento.descricao}</div>
             <div className="text-gray-500 mt-1">
-              {lancamento.tipo === "receita" ? "📈 Receita" : "📉 Despesa"} ·{" "}
-              <span className={lancamento.tipo === "receita" ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
+              {lancamento.tipo === "receber" ? "📈 A Receber" : "📉 A Pagar"} ·{" "}
+              <span className={lancamento.tipo === "receber" ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
                 {fmtBRL(lancamento.valor)}
               </span>
             </div>
@@ -224,10 +225,10 @@ function ModalBaixa({ lancamento, contas, onClose, onSaved }) {
 // ----------- Main Page -----------
 export default function Lancamentos() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tipoParam = searchParams.get("tipo") || "receita";
+  const tipoParam = searchParams.get("tipo") || "receber";
   const statusParam = searchParams.get("status") || "";
 
-  const [tab, setTab] = useState(tipoParam === "despesa" ? "despesa" : "receita");
+  const [tab, setTab] = useState(tipoParam === "pagar" || tipoParam === "despesa" ? "pagar" : "receber");
   const [lancamentos, setLancamentos] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [contas, setContas] = useState([]);
@@ -282,8 +283,8 @@ export default function Lancamentos() {
       {/* Tabs */}
       <div className="flex gap-2 border-b border-gray-200">
         {[
-          { key: "receita", label: "📈 A Receber", color: "text-green-600 border-green-500" },
-          { key: "despesa", label: "📉 A Pagar", color: "text-red-600 border-red-500" },
+          { key: "receber", label: "📈 A Receber", color: "text-green-600 border-green-500" },
+          { key: "pagar", label: "📉 A Pagar", color: "text-red-600 border-red-500" },
         ].map((t) => (
           <button
             key={t.key}
@@ -315,7 +316,7 @@ export default function Lancamentos() {
             </button>
           ))}
         </div>
-        <div className={`text-sm font-semibold ${tab === "receita" ? "text-green-600" : "text-red-600"}`}>
+        <div className={`text-sm font-semibold ${tab === "receber" ? "text-green-600" : "text-red-600"}`}>
           Pendente: {fmtBRL(totalPendente)}
         </div>
       </div>
@@ -357,7 +358,7 @@ export default function Lancamentos() {
                   <td className="px-4 py-3 text-gray-500">{l.cliente_nome || "—"}</td>
                   <td className="px-4 py-3 text-gray-500">{l.categoria_nome || "—"}</td>
                   <td className={`px-4 py-3 text-right font-semibold ${
-                    l.tipo === "receita" ? "text-green-600" : "text-red-600"
+                    l.tipo === "receber" ? "text-green-600" : "text-red-600"
                   }`}>
                     {fmtBRL(l.valor)}
                   </td>
