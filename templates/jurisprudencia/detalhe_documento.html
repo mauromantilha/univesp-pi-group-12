@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.titulo }} – CRM Advocacia{% endblock %}
+{% block page_title %}{{ doc.titulo }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between">
+    <div>
+      <span class="badge bg-secondary me-2">{{ doc.get_categoria_display }}</span>
+      {% if doc.tribunal %}<span class="text-muted small"><i class="bi bi-building me-1"></i>{{ doc.tribunal }}</span>{% endif %}
+    </div>
+    <a href="{% url 'editar_documento' doc.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+  </div>
+  <div class="card-body">
+    {% if doc.processo_referencia %}
+    <p class="mb-1"><strong>Processo vinculado:</strong> <a href="{% url 'detalhe_processo' doc.processo_referencia.pk %}">{{ doc.processo_referencia.numero }}</a></p>
+    {% endif %}
+    {% if doc.data_decisao %}<p class="mb-1"><strong>Data da Decisão:</strong> {{ doc.data_decisao|date:"d/m/Y" }}</p>{% endif %}
+    {% if doc.tags %}
+    <p class="mb-2">
+      {% for tag in doc.get_tags_list %}
+      <span class="badge bg-light text-dark border">{{ tag }}</span>
+      {% endfor %}
+    </p>
+    {% endif %}
+    <hr>
+    <div style="white-space:pre-wrap">{{ doc.conteudo }}</div>
+    {% if doc.arquivo %}
+    <hr>
+    <a href="{{ doc.arquivo.url }}" target="_blank" class="btn btn-outline-primary"><i class="bi bi-file-earmark-pdf me-1"></i> Baixar Documento</a>
+    {% endif %}
+  </div>
+  <div class="card-footer text-muted small">
+    Adicionado por {{ doc.adicionado_por.get_full_name|default:doc.adicionado_por.username|default:"–" }} em {{ doc.criado_em|date:"d/m/Y" }}
+  </div>
+</div>
+{% endblock %}

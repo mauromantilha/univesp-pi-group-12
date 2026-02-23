@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Carga de Trabalho – CRM Advocacia{% endblock %}
+{% block page_title %}Distribuição de Carga de Trabalho{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Advogado</th>
+          <th>Papel</th>
+          <th>Total de Processos</th>
+          <th>Em Andamento</th>
+          <th>Distribuição</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in dados %}
+        <tr>
+          <td>{{ d.advogado.get_full_name|default:d.advogado.username }}</td>
+          <td><span class="badge bg-{% if d.advogado.papel == 'administrador' %}danger{% else %}primary{% endif %}">{{ d.advogado.get_papel_display }}</span></td>
+          <td>{{ d.total }}</td>
+          <td>{{ d.em_andamento }}</td>
+          <td>
+            <div class="progress" style="height:10px;min-width:120px">
+              {% with pct=d.em_andamento|stringformat:"d" %}
+              <div class="progress-bar bg-primary" style="width:{% widthratio d.em_andamento 1 5 %}0%"></div>
+              {% endwith %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted py-3">Nenhum dado disponível.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

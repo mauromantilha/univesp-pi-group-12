@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Varas – CRM Advocacia{% endblock %}
+{% block page_title %}Varas{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-end mb-3">
+  <a href="{% url 'nova_vara' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus me-1"></i> Nova Vara</a>
+</div>
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-light"><tr><th>Vara</th><th>Comarca</th><th>UF</th></tr></thead>
+      <tbody>
+        {% for v in varas %}
+        <tr>
+          <td>{{ v.nome }}</td>
+          <td>{{ v.comarca.nome }}</td>
+          <td>{{ v.comarca.estado }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="text-center text-muted py-3">Nenhuma vara.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

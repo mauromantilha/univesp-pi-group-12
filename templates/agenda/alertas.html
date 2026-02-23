@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Alertas de Prazo – CRM Advocacia{% endblock %}
+{% block page_title %}Alertas de Prazo (próximos 7 dias){% endblock %}
+{% block content %}
+{% if prazos %}
+<div class="row g-3">
+  {% for p in prazos %}
+  <div class="col-md-6">
+    <div class="card border-{% if p.data == hoje %}danger{% else %}warning{% endif %}">
+      <div class="card-body">
+        <h6 class="card-title mb-1">{{ p.titulo }}</h6>
+        <div class="d-flex justify-content-between">
+          <div>
+            <small class="text-muted">
+              {% if p.processo %}<a href="{% url 'detalhe_processo' p.processo.pk %}">{{ p.processo.numero }}</a>{% endif %}
+            </small><br>
+            <small>{{ p.advogado.get_full_name|default:p.advogado.username }}</small>
+          </div>
+          <div class="text-end">
+            <span class="badge fs-6 {% if p.data == hoje %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+              {{ p.data|date:"d/m/Y" }}
+            </span>
+            <br>
+            {% if p.data == hoje %}<small class="text-danger fw-bold">HOJE!</small>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-success">
+  <i class="bi bi-check-circle-fill me-2"></i> Nenhum prazo fatal nos próximos 7 dias. 🎉
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Repositório de Jurisprudência – CRM Advocacia{% endblock %}
+{% block page_title %}Repositório de Jurisprudência{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <form class="d-flex gap-2" method="get">
+    <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="Buscar em conteúdo, título, tags…">
+    <select name="categoria" class="form-select form-select-sm" style="width:200px">
+      <option value="">Todas as categorias</option>
+      {% for val, label in categorias %}
+      <option value="{{ val }}" {% if categoria_filtro == val %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
+  </form>
+  <a href="{% url 'novo_documento' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus me-1"></i> Novo Documento</a>
+</div>
+<div class="row g-3">
+  {% for doc in documentos %}
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="badge bg-secondary">{{ doc.get_categoria_display }}</span>
+          {% if doc.data_decisao %}<small class="text-muted">{{ doc.data_decisao|date:"d/m/Y" }}</small>{% endif %}
+        </div>
+        <h6 class="card-title"><a href="{% url 'detalhe_documento' doc.pk %}">{{ doc.titulo }}</a></h6>
+        {% if doc.tribunal %}<small class="text-muted"><i class="bi bi-building me-1"></i>{{ doc.tribunal }}</small>{% endif %}
+        <p class="card-text text-muted small mt-1">{{ doc.conteudo|truncatewords:25 }}</p>
+        {% if doc.tags %}
+        <div class="mt-1">
+          {% for tag in doc.get_tags_list %}
+          <span class="badge bg-light text-dark border me-1">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="col-12">
+    <div class="alert alert-info">Nenhum documento encontrado. <a href="{% url 'novo_documento' %}">Adicionar primeiro documento.</a></div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
