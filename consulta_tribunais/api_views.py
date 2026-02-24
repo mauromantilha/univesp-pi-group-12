@@ -36,17 +36,32 @@ class ConsultaProcessoViewSet(viewsets.ModelViewSet):
         return queryset
     
     @action(detail=False, methods=['post'])
-    def buscar_por_parte(self, request):
-        """Busca processos por nome de parte ou advogado"""
-        tribunal_id = request.data.get('tribunal_id')
-        nome = request.data.get('nome', '').strip()
-        max_results = int(request.data.get('max_results', 10))
+    def buscar_avancado(self, request):
+        """
+        Busca avançada de processos.
         
-        if not nome:
-            return Response(
-                {'error': 'Nome da parte ou advogado é obrigatório'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        IMPORTANTE: A API Pública DataJud NÃO possui dados de partes/advogados.
+        
+        Campos disponíveis para busca:
+        - classe: Nome da classe processual (ex: "Reclamação Trabalhista")
+        - orgao_julgador: Nome do órgão (ex: "1ª Vara")
+        - assunto: Assunto (ex: "Horas Extras")
+        - data_inicio: Data inicial YYYYMMDD (ex: "20240101")
+        - data_fim: Data final YYYYMMDD (ex: "20241231")
+        """
+        tribunal_id = request.data.get('tribunal_id')
+        filtros = {
+            'classe': request.data.get('classe', '').strip(),
+            'orgao_julgador': request.data.get('orgao_julgador', '').strip(),
+            'assunto': request.data.get('assunto', '').strip(),
+            'data_inicio': request.data.get('data_inicio', '').strip(),
+            'data_fim': request.data.get('data_fim', '').strip(),
+        }
+        
+        # Remove filtros vazios
+        filtros = {k: v for k, v in filtros.items() if v}
+        
+        max_results = int(request.data.get('max_results', 20))
         
         try:
             tribunal = Tribunal.objects.get(id=tribunal_id, ativo=True)
@@ -58,11 +73,13 @@ class ConsultaProcessoViewSet(viewsets.ModelViewSet):
         
         try:
             datajud = DataJudService(tribunal)
-            processos = datajud.buscar_processos_parte(nome, max_results)
+            processos = datajud.buscar_processos_avancado(filtros, max_results)
             
             return Response({
                 'total': len(processos),
-                'processos': processos
+                'processos': processos,
+                'filtros_aplicados': filtros,
+                'aviso': 'A API pública DataJud não possui dados de partes/advogados.'
             }, status=status.HTTP_200_OK)
             
         except Exception as e:

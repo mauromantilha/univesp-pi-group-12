@@ -58,21 +58,69 @@ class DataJudService:
         except requests.RequestException as e:
             raise Exception(f"Erro ao consultar DataJud: {str(e)}")
     
-    def buscar_processos_parte(self, nome_parte, max_results=10):
-        """Busca processos por nome de parte ou advogado"""
+    def buscar_processos_avancado(self, filtros, max_results=20):
+        """
+        Busca avançada de processos.
+        
+        ATENÇÃO: A API Pública DataJud NÃO possui dados de partes/advogados.
+        Campos disponíveis: numeroProcesso, classe, orgaoJulgador, dataAjuizamento, assuntos
+        
+        Args:
+            filtros (dict): Filtros de busca
+                - classe: Nome da classe processual (ex: "Reclamação Trabalhista")
+                - orgao_julgador: Nome do órgão (ex: "1ª Vara do Trabalho")
+                - data_inicio: Data inicial (formato: YYYYMMDD)
+                - data_fim: Data final (formato: YYYYMMDD)
+                - assunto: Assunto (ex: "Horas Extras")
+            max_results (int): Número máximo de resultados
+        
+        Returns:
+            list: Lista de processos encontrados
+        """
         try:
-            query = {
-                "query": {
-                    "bool": {
-                        "should": [
-                            {"match": {"nome": nome_parte}},
-                            {"match": {"nomeAdvogado": nome_parte}}
-                        ],
-                        "minimum_should_match": 1
+            # Construir query Elasticsearch
+            must_clauses = []
+            
+            if filtros.get('classe'):
+                must_clauses.append({
+                    "match": {"classe.nome": filtros['classe']}
+                })
+            
+            if filtros.get('orgao_julgador'):
+                must_clauses.append({
+                    "match": {"orgaoJulgador.nome": filtros['orgao_julgador']}
+                })
+            
+            if filtros.get('assunto'):
+                must_clauses.append({
+                    "match": {"assuntos.nome": filtros['assunto']}
+                })
+            
+            if filtros.get('data_inicio') or filtros.get('data_fim'):
+                range_filter = {}
+                if filtros.get('data_inicio'):
+                    range_filter['gte'] = filtros['data_inicio']
+                if filtros.get('data_fim'):
+                    range_filter['lte'] = filtros['data_fim']
+                
+                must_clauses.append({
+                    "range": {"dataAjuizamento": range_filter}
+                })
+            
+            # Se não há filtros, busca os mais recentes
+            if not must_clauses:
+                query = {"query": {"match_all": {}}}
+            else:
+                query = {
+                    "query": {
+                        "bool": {
+                            "must": must_clauses
+                        }
                     }
-                },
-                "size": max_results
-            }
+                }
+            
+            query["size"] = max_results
+            query["sort"] = [{"dataAjuizamento": "desc"}]
             
             headers = {
                 'Authorization': f'APIKey {self.api_key}',
