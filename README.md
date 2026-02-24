@@ -88,7 +88,35 @@ Ou em linha única:
 CSRF_TRUSTED_ORIGINS=http://15.228.99.99.nip.io:8000 python manage.py runserver 0.0.0.0:8000
 ```
 
-### 4. Manter o servidor rodando em segundo plano (nohup)
+### 5. Esqueceu a senha / senha não aceita?
+
+Execute no servidor para redefinir a senha do admin:
+
+```bash
+python manage.py shell -c "
+from accounts.models import Usuario
+u = Usuario.objects.get(username='admin')
+u.set_password('admin123')
+u.save()
+print('Senha redefinida com sucesso!')
+"
+```
+
+Ou use o comando nativo do Django para qualquer usuário:
+
+```bash
+python manage.py changepassword admin
+```
+
+O `seed_demo` também redefine as senhas se executado novamente:
+
+```bash
+python manage.py seed_demo
+# admin -> admin123 | adv1..adv5 -> senha123
+```
+
+
+### 6. Manter o servidor rodando em segundo plano (nohup)
 
 ```bash
 export CSRF_TRUSTED_ORIGINS=http://SEU_IP.nip.io:8000
