@@ -31,7 +31,7 @@ Sistema de gerenciamento de escritório de advocacia desenvolvido com Django (Py
 - Sugestão automática de jurisprudência por processo
 - Busca inteligente no repositório
 
-## Como executar
+## Como executar (local)
 
 ```bash
 # Instalar dependências
@@ -43,13 +43,64 @@ python manage.py migrate
 # Criar dados de demonstração
 python manage.py seed_demo
 
-# Iniciar servidor
+# Iniciar servidor (localhost)
 python manage.py runserver
 ```
 
 Acesse `http://localhost:8000` e entre com:
 - **Admin**: `admin` / `admin123`
 - **Advogado**: `adv1` / `senha123`
+
+## Deploy em servidor remoto (EC2 / VPS)
+
+### 1. Iniciar o servidor acessível externamente
+
+```bash
+# Bind em todas as interfaces (necessário para acesso externo)
+python manage.py runserver 0.0.0.0:8000
+```
+
+### 2. IP mudou? Siga estes passos
+
+```bash
+# 1. No servidor, descubra o novo IP público
+curl -s ifconfig.me
+
+# 2. Reinicie o servidor com o novo IP
+python manage.py runserver 0.0.0.0:8000
+
+# 3. Acesse via nip.io substituindo SEU_IP pelo IP atual
+# http://SEU_IP.nip.io:8000/login
+```
+
+### 3. Definir CSRF_TRUSTED_ORIGINS (importante para nip.io)
+
+Quando acessado por URL pública (nip.io ou domínio), defina a variável de ambiente **antes** de iniciar o servidor:
+
+```bash
+export CSRF_TRUSTED_ORIGINS=http://SEU_IP.nip.io:8000
+python manage.py runserver 0.0.0.0:8000
+```
+
+Ou em linha única:
+
+```bash
+CSRF_TRUSTED_ORIGINS=http://15.228.99.99.nip.io:8000 python manage.py runserver 0.0.0.0:8000
+```
+
+### 4. Manter o servidor rodando em segundo plano (nohup)
+
+```bash
+export CSRF_TRUSTED_ORIGINS=http://SEU_IP.nip.io:8000
+nohup python manage.py runserver 0.0.0.0:8000 > crm.log 2>&1 &
+echo "Servidor iniciado. PID: $!"
+```
+
+Para parar:
+
+```bash
+pkill -f "manage.py runserver"
+```
 
 ## Tecnologias
 - Python 3 / Django 6

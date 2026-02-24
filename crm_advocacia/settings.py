@@ -18,6 +18,11 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+# When deploying behind a public URL (e.g. http://<IP>.nip.io), add it here.
+# Example: CSRF_TRUSTED_ORIGINS=http://15.228.15.4.nip.io
+_csrf_origins = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(',') if o.strip()]
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
