@@ -36,6 +36,42 @@ class ConsultaProcessoViewSet(viewsets.ModelViewSet):
         return queryset
     
     @action(detail=False, methods=['post'])
+    def buscar_por_parte(self, request):
+        """Busca processos por nome de parte ou advogado"""
+        tribunal_id = request.data.get('tribunal_id')
+        nome = request.data.get('nome', '').strip()
+        max_results = int(request.data.get('max_results', 10))
+        
+        if not nome:
+            return Response(
+                {'error': 'Nome da parte ou advogado é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            tribunal = Tribunal.objects.get(id=tribunal_id, ativo=True)
+        except Tribunal.DoesNotExist:
+            return Response(
+                {'error': 'Tribunal não encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            datajud = DataJudService(tribunal)
+            processos = datajud.buscar_processos_parte(nome, max_results)
+            
+            return Response({
+                'total': len(processos),
+                'processos': processos
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['post'])
     def consultar(self, request):
         """Realiza uma nova consulta no tribunal"""
         serializer = ConsultaProcessoCreateSerializer(data=request.data)

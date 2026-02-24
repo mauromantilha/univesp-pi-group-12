@@ -59,12 +59,16 @@ class DataJudService:
             raise Exception(f"Erro ao consultar DataJud: {str(e)}")
     
     def buscar_processos_parte(self, nome_parte, max_results=10):
-        """Busca processos por nome de parte"""
+        """Busca processos por nome de parte ou advogado"""
         try:
             query = {
                 "query": {
-                    "match": {
-                        "nome": nome_parte
+                    "bool": {
+                        "should": [
+                            {"match": {"nome": nome_parte}},
+                            {"match": {"nomeAdvogado": nome_parte}}
+                        ],
+                        "minimum_should_match": 1
                     }
                 },
                 "size": max_results
