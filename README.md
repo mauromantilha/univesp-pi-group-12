@@ -7,7 +7,7 @@ O grande diferencial do sistema é a futura integração com Inteligência Artif
 
 ---
 
-## 💻 Tecnologias Utilizadas
+## Tecnologias Utilizadas
 
 A arquitetura do projeto foi desenhada para ser modular e escalável, separando claramente as responsabilidades entre o cliente e o servidor:
 
@@ -17,7 +17,7 @@ A arquitetura do projeto foi desenhada para ser modular e escalável, separando 
 
 ---
 
-## ⚙️ Estrutura de Módulos (Escopo)
+##  Estrutura de Módulos (Escopo)
 
 O sistema está dividido em 5 módulos lógicos principais:
 
@@ -41,7 +41,7 @@ O sistema está dividido em 5 módulos lógicos principais:
 
 ---
 
-## 🗺️ Roadmap de Desenvolvimento (Fases do Projeto Integrador)
+##  Roadmap de Desenvolvimento (Fases do Projeto Integrador)
 
 Para garantir entregas consistentes e gerenciar o escopo de forma eficiente ao longo do semestre, o desenvolvimento seguirá as seguintes fases:
 
@@ -51,7 +51,7 @@ Para garantir entregas consistentes e gerenciar o escopo de forma eficiente ao l
 
 ---
 
-## 🚀 Como rodar o projeto localmente (Backend)
+## Como rodar o projeto localmente (Backend)
 
 *(Instruções preliminares - serão atualizadas conforme a configuração do ambiente)*
 
