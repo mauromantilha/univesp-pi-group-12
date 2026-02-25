@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from accounts.models import Usuario
-from .models import Cliente, Processo, TipoProcesso
+from .models import Cliente, Processo, ProcessoArquivo, TipoProcesso
 
 
 class ClienteSegurancaUploadTest(TestCase):
@@ -89,3 +89,100 @@ class ClienteSegurancaUploadTest(TestCase):
         self.assertEqual(cliente.responsavel_id, self.adv1.pk)
         self.assertEqual(cliente.processos_possiveis.count(), 1)
         self.assertEqual(cliente.arquivos.count(), 2)
+
+
+class ProcessoUploadIntegracaoTest(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.adv1 = Usuario.objects.create_user(username='adv_proc_1', password='pass', papel='advogado')
+        self.adv2 = Usuario.objects.create_user(username='adv_proc_2', password='pass', papel='advogado')
+        self.tipo = TipoProcesso.objects.create(nome='Trabalhista')
+        self.cliente = Cliente.objects.create(nome='Cliente Processo', tipo='pf', responsavel=self.adv1)
+        self.processo = Processo.objects.create(
+            numero='2000000-00.2026.8.26.0001',
+            cliente=self.cliente,
+            advogado=self.adv1,
+            tipo=self.tipo,
+            status='em_andamento',
+            objeto='Processo base',
+        )
+
+    def test_novo_processo_com_upload_multiplo_arquivos(self):
+        self.client.login(username='adv_proc_1', password='pass')
+        arquivo_1 = SimpleUploadedFile('peticao1.txt', b'peticao 1', content_type='text/plain')
+        arquivo_2 = SimpleUploadedFile('peticao2.txt', b'peticao 2', content_type='text/plain')
+
+        response = self.client.post(
+            reverse('novo_processo'),
+            {
+                'numero': '2000000-00.2026.8.26.0002',
+                'cliente': str(self.cliente.pk),
+                'advogado': str(self.adv1.pk),
+                'tipo': str(self.tipo.pk),
+                'vara': '',
+                'status': 'em_andamento',
+                'valor_causa': '',
+                'objeto': 'Novo processo com anexos',
+                'arquivos': [arquivo_1, arquivo_2],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        novo_processo = Processo.objects.get(numero='2000000-00.2026.8.26.0002')
+        self.assertEqual(novo_processo.advogado_id, self.adv1.pk)
+        self.assertEqual(novo_processo.arquivos.count(), 2)
+
+    def test_editar_processo_adiciona_arquivos_sem_perder_existentes(self):
+        self.client.login(username='adv_proc_1', password='pass')
+        arquivo_existente = SimpleUploadedFile('anexo_antigo.txt', b'antigo', content_type='text/plain')
+        ProcessoArquivo.objects.create(
+            processo=self.processo,
+            arquivo=arquivo_existente,
+            nome_original='anexo_antigo.txt',
+            enviado_por=self.adv1,
+        )
+        novo_arquivo_1 = SimpleUploadedFile('anexo_novo_1.txt', b'novo 1', content_type='text/plain')
+        novo_arquivo_2 = SimpleUploadedFile('anexo_novo_2.txt', b'novo 2', content_type='text/plain')
+
+        response = self.client.post(
+            reverse('editar_processo', args=[self.processo.pk]),
+            {
+                'numero': self.processo.numero,
+                'cliente': str(self.cliente.pk),
+                'advogado': str(self.adv1.pk),
+                'tipo': str(self.tipo.pk),
+                'vara': '',
+                'status': 'em_andamento',
+                'valor_causa': '',
+                'objeto': 'Processo atualizado',
+                'arquivos': [novo_arquivo_1, novo_arquivo_2],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.processo.refresh_from_db()
+        self.assertEqual(self.processo.arquivos.count(), 3)
+
+    def test_upload_endpoint_bloqueia_advogado_sem_acesso(self):
+        self.client.login(username='adv_proc_2', password='pass')
+        arquivo = SimpleUploadedFile('bloqueado.txt', b'bloqueado', content_type='text/plain')
+
+        response = self.client.post(
+            reverse('upload_arquivos_processo', args=[self.processo.pk]),
+            {'arquivos': [arquivo]},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.processo.refresh_from_db()
+        self.assertEqual(self.processo.arquivos.count(), 0)
+
+    def test_upload_endpoint_permite_advogado_do_processo(self):
+        self.client.login(username='adv_proc_1', password='pass')
+        arquivo_1 = SimpleUploadedFile('ok1.txt', b'ok 1', content_type='text/plain')
+        arquivo_2 = SimpleUploadedFile('ok2.txt', b'ok 2', content_type='text/plain')
+
+        response = self.client.post(
+            reverse('upload_arquivos_processo', args=[self.processo.pk]),
+            {'arquivos': [arquivo_1, arquivo_2]},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.processo.refresh_from_db()
+        self.assertEqual(self.processo.arquivos.count(), 2)
