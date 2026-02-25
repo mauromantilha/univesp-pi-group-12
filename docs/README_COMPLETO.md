@@ -435,4 +435,4 @@ python manage.py test processos.tests_api
 
 ---
 
-Se quiser, eu também posso gerar uma versão curta desse README para a página inicial do repositório e deixar esta versão completa em `docs/README_COMPLETO.md`.
+
