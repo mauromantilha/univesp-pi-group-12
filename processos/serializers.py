@@ -24,11 +24,30 @@ class TipoProcessoSerializer(serializers.ModelSerializer):
 
 class ClienteSerializer(serializers.ModelSerializer):
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    responsavel_nome = serializers.CharField(source='responsavel.get_full_name', read_only=True)
+    processos_possiveis_nomes = serializers.SerializerMethodField()
     
     class Meta:
         model = Cliente
-        fields = ['id', 'tipo', 'tipo_display', 'nome', 'cpf_cnpj', 
-                  'email', 'telefone', 'endereco']
+        fields = [
+            'id',
+            'tipo',
+            'tipo_display',
+            'nome',
+            'responsavel',
+            'responsavel_nome',
+            'cpf_cnpj',
+            'email',
+            'telefone',
+            'endereco',
+            'demanda',
+            'processos_possiveis',
+            'processos_possiveis_nomes',
+            'observacoes',
+        ]
+
+    def get_processos_possiveis_nomes(self, obj):
+        return [tipo.nome for tipo in obj.processos_possiveis.all()]
 
 
 class MovimentacaoSerializer(serializers.ModelSerializer):

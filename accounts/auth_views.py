@@ -5,6 +5,7 @@ from rest_framework import status
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
+from accounts.activity import registrar_atividade
 from accounts.serializers import UsuarioSerializer
 
 
@@ -41,6 +42,13 @@ def login_view(request):
         )
     
     refresh = RefreshToken.for_user(user)
+    registrar_atividade(
+        acao='login_api',
+        request=request,
+        usuario=user,
+        autor=user,
+        detalhes='Login realizado via API.',
+    )
     
     return Response({
         'access': str(refresh.access_token),

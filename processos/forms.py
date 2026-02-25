@@ -22,19 +22,43 @@ class MultiFileField(forms.FileField):
 
 
 class ClienteForm(forms.ModelForm):
+    documentos = MultiFileField(
+        required=False,
+        label='Documentos do Cliente',
+        widget=MultiFileInput(attrs={'class': 'form-control'}),
+    )
+
     class Meta:
         model = Cliente
-        fields = '__all__'
-        exclude = ['criado_em']
+        fields = [
+            'tipo',
+            'nome',
+            'responsavel',
+            'cpf_cnpj',
+            'email',
+            'telefone',
+            'endereco',
+            'demanda',
+            'processos_possiveis',
+            'observacoes',
+        ]
         widgets = {
             'tipo': forms.Select(attrs=SELECT_ATTRS),
             'nome': forms.TextInput(attrs=WIDGET_ATTRS),
+            'responsavel': forms.Select(attrs=SELECT_ATTRS),
             'cpf_cnpj': forms.TextInput(attrs=WIDGET_ATTRS),
             'email': forms.EmailInput(attrs=WIDGET_ATTRS),
             'telefone': forms.TextInput(attrs=WIDGET_ATTRS),
             'endereco': forms.Textarea(attrs={**WIDGET_ATTRS, 'rows': 2}),
+            'demanda': forms.Textarea(attrs={**WIDGET_ATTRS, 'rows': 3}),
+            'processos_possiveis': forms.SelectMultiple(attrs={**SELECT_ATTRS, 'size': 8}),
             'observacoes': forms.Textarea(attrs={**WIDGET_ATTRS, 'rows': 3}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['processos_possiveis'].queryset = TipoProcesso.objects.order_by('nome')
+        self.fields['processos_possiveis'].help_text = 'Selecione um ou mais tipos de processo relacionados à demanda.'
 
 
 class ProcessoForm(forms.ModelForm):

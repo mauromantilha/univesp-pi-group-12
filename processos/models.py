@@ -45,10 +45,26 @@ class Cliente(models.Model):
     TIPO_CHOICES = [('pf', 'Pessoa Física'), ('pj', 'Pessoa Jurídica')]
     tipo = models.CharField(max_length=2, choices=TIPO_CHOICES, default='pf', verbose_name='Tipo')
     nome = models.CharField(max_length=200, verbose_name='Nome / Razão Social')
+    responsavel = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='clientes_responsavel',
+        limit_choices_to={'papel__in': ['advogado', 'administrador']},
+        verbose_name='Responsável',
+    )
     cpf_cnpj = models.CharField(max_length=20, blank=True, null=True, verbose_name='CPF / CNPJ')
     email = models.EmailField(blank=True, null=True, verbose_name='E-mail')
     telefone = models.CharField(max_length=20, blank=True, null=True, verbose_name='Telefone')
     endereco = models.TextField(blank=True, null=True, verbose_name='Endereço')
+    demanda = models.TextField(blank=True, null=True, verbose_name='Demanda do Cliente')
+    processos_possiveis = models.ManyToManyField(
+        'TipoProcesso',
+        related_name='clientes_interessados',
+        blank=True,
+        verbose_name='Processos Possíveis',
+    )
     observacoes = models.TextField(blank=True, null=True, verbose_name='Observações')
     criado_em = models.DateTimeField(auto_now_add=True)
 
@@ -117,6 +133,34 @@ class ProcessoArquivo(models.Model):
     class Meta:
         verbose_name = 'Arquivo do Processo'
         verbose_name_plural = 'Arquivos do Processo'
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return self.nome_original or self.arquivo.name
+
+
+class ClienteArquivo(models.Model):
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.CASCADE,
+        related_name='arquivos',
+        verbose_name='Cliente',
+    )
+    arquivo = models.FileField(upload_to='clientes/arquivos/', verbose_name='Arquivo')
+    nome_original = models.CharField(max_length=255, blank=True, verbose_name='Nome Original')
+    enviado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='arquivos_cliente_enviados',
+        verbose_name='Enviado por',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Arquivo do Cliente'
+        verbose_name_plural = 'Arquivos do Cliente'
         ordering = ['-criado_em']
 
     def __str__(self):

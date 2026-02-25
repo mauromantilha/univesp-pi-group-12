@@ -5,7 +5,8 @@ from django.contrib import messages
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.db.models import Q, Sum
 from datetime import timedelta
-from .models import Usuario
+from .activity import registrar_atividade
+from .models import Usuario, UsuarioAtividadeLog
 from .forms import LoginForm, UsuarioCreationForm, UsuarioChangeForm, PerfilForm
 
 
@@ -21,6 +22,13 @@ def login_view(request):
         )
         if user:
             login(request, user)
+            registrar_atividade(
+                acao='login_web',
+                request=request,
+                usuario=user,
+                autor=user,
+                detalhes='Login realizado na interface web.',
+            )
             next_url = request.GET.get('next', '')
             if next_url and url_has_allowed_host_and_scheme(
                 next_url,
@@ -34,6 +42,14 @@ def login_view(request):
 
 
 def logout_view(request):
+    if request.user.is_authenticated:
+        registrar_atividade(
+            acao='logout',
+            request=request,
+            usuario=request.user,
+            autor=request.user,
+            detalhes='Logout realizado na interface web.',
+        )
     logout(request)
     return redirect('login')
 
@@ -92,11 +108,33 @@ def dashboard(request):
 
 @login_required
 def lista_usuarios(request):
+    return gestao_usuarios(request)
+
+
+def _contexto_gestao_usuarios():
+    usuarios = Usuario.objects.all().order_by('first_name', 'username')
+    logs_qs = UsuarioAtividadeLog.objects.select_related('autor', 'usuario').all()
+    return {
+        'usuarios': usuarios,
+        'usuarios_ativos': usuarios.filter(is_active=True).count(),
+        'usuarios_inativos': usuarios.filter(is_active=False).count(),
+        'advogados_ativos': usuarios.filter(papel='advogado', is_active=True).count(),
+        'atividades_recentes': logs_qs[:12],
+        'auditoria_logs': logs_qs[:60],
+    }
+
+
+@login_required
+def gestao_usuarios(request):
     if not request.user.is_administrador():
         messages.error(request, 'Acesso negado.')
         return redirect('dashboard')
-    usuarios = Usuario.objects.all().order_by('first_name')
-    return render(request, 'accounts/lista_usuarios.html', {'usuarios': usuarios})
+    registrar_atividade(
+        acao='gestao_usuarios',
+        request=request,
+        detalhes='Acesso à página de gestão de usuários.',
+    )
+    return render(request, 'accounts/gestao_usuarios.html', _contexto_gestao_usuarios())
 
 
 @login_required
@@ -106,9 +144,16 @@ def novo_usuario(request):
         return redirect('dashboard')
     form = UsuarioCreationForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
-        form.save()
+        usuario_criado = form.save()
+        registrar_atividade(
+            acao='usuario_criado',
+            request=request,
+            usuario=usuario_criado,
+            detalhes=f'Usuário {usuario_criado.username} criado.',
+            dados_extra={'usuario_id': usuario_criado.pk},
+        )
         messages.success(request, 'Usuário criado com sucesso.')
-        return redirect('lista_usuarios')
+        return redirect('gestao_usuarios')
     return render(request, 'accounts/form_usuario.html', {'form': form, 'titulo': 'Novo Usuário'})
 
 
@@ -121,8 +166,15 @@ def editar_usuario(request, pk):
     form = UsuarioChangeForm(request.POST or None, request.FILES or None, instance=usuario)
     if request.method == 'POST' and form.is_valid():
         form.save()
+        registrar_atividade(
+            acao='usuario_editado',
+            request=request,
+            usuario=usuario,
+            detalhes=f'Usuário {usuario.username} atualizado.',
+            dados_extra={'usuario_id': usuario.pk},
+        )
         messages.success(request, 'Usuário atualizado com sucesso.')
-        return redirect('lista_usuarios')
+        return redirect('gestao_usuarios')
     return render(request, 'accounts/form_usuario.html', {'form': form, 'titulo': 'Editar Usuário', 'objeto': usuario})
 
 
@@ -131,6 +183,13 @@ def perfil(request):
     form = PerfilForm(request.POST or None, request.FILES or None, instance=request.user)
     if request.method == 'POST' and form.is_valid():
         form.save()
+        registrar_atividade(
+            acao='perfil_atualizado',
+            request=request,
+            usuario=request.user,
+            autor=request.user,
+            detalhes='Perfil atualizado pelo próprio usuário.',
+        )
         messages.success(request, 'Perfil atualizado com sucesso.')
         return redirect('perfil')
     return render(request, 'accounts/perfil.html', {'form': form})
@@ -196,6 +255,13 @@ def meu_portal(request):
         contexto = _contexto_portal(usuario_alvo=None)
     else:
         contexto = _contexto_portal(usuario_alvo=request.user)
+    registrar_atividade(
+        acao='acesso_portal',
+        request=request,
+        usuario=request.user,
+        autor=request.user,
+        detalhes='Acesso ao próprio portal.',
+    )
     return render(request, 'accounts/portal_usuario.html', contexto)
 
 
@@ -206,4 +272,11 @@ def portal_usuario(request, pk):
         messages.error(request, 'Você não pode acessar o portal de outro usuário.')
         return redirect('meu_portal')
     contexto = _contexto_portal(usuario_alvo=usuario_alvo)
+    registrar_atividade(
+        acao='acesso_portal',
+        request=request,
+        usuario=usuario_alvo,
+        detalhes=f'Acesso ao portal de {usuario_alvo.username}.',
+        dados_extra={'usuario_alvo_id': usuario_alvo.pk},
+    )
     return render(request, 'accounts/portal_usuario.html', contexto)

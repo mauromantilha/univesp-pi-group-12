@@ -2,6 +2,7 @@ from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
+from django.db.models import Q
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
 from .models import Comarca, Vara, TipoProcesso, Cliente, Processo, Movimentacao
 from .serializers import (
@@ -40,14 +41,31 @@ class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.all()
     serializer_class = ClienteSerializer
     permission_classes = [IsAdvogadoOuAdministradorWrite]
-    search_fields = ['nome', 'cpf_cnpj', 'email']
+    search_fields = ['nome', 'cpf_cnpj', 'email', 'demanda']
     ordering_fields = ['nome', 'tipo']
 
     def get_queryset(self):
         queryset = super().get_queryset()
         if self.request.user.is_administrador():
             return queryset
-        return queryset.filter(processos__advogado=self.request.user).distinct()
+        return queryset.filter(
+            Q(processos__advogado=self.request.user) | Q(responsavel=self.request.user)
+        ).distinct()
+
+    def perform_create(self, serializer):
+        if self.request.user.is_administrador():
+            serializer.save()
+            return
+        serializer.save(responsavel=self.request.user)
+
+    def perform_update(self, serializer):
+        if self.request.user.is_administrador():
+            serializer.save()
+            return
+        responsavel = serializer.validated_data.get('responsavel')
+        if responsavel and responsavel.pk != self.request.user.pk:
+            raise PermissionDenied('Você não pode transferir responsável deste cliente.')
+        serializer.save(responsavel=self.request.user)
 
 
 class ProcessoViewSet(viewsets.ModelViewSet):
@@ -72,7 +90,10 @@ class ProcessoViewSet(viewsets.ModelViewSet):
     def _cliente_disponivel_para_usuario(self, cliente):
         if self.request.user.is_administrador():
             return True
-        return cliente.processos.filter(advogado=self.request.user).exists() or not cliente.processos.exists()
+        return (
+            cliente.processos.filter(advogado=self.request.user).exists()
+            or cliente.responsavel_id == self.request.user.id
+        )
 
     def perform_create(self, serializer):
         if self.request.user.is_administrador():

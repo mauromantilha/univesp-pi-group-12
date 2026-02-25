@@ -21,9 +21,10 @@ urlpatterns = [
     # Apps
     path('accounts/', include('accounts.urls')),
     # Atalhos diretos para a área de usuários (admin)
-    path('usuarios/', accounts_views.lista_usuarios, name='usuarios_area'),
+    path('usuarios/', accounts_views.gestao_usuarios, name='usuarios_area'),
     path('usuarios/novo/', accounts_views.novo_usuario, name='usuarios_novo_area'),
     path('usuarios/<int:pk>/editar/', accounts_views.editar_usuario, name='usuarios_editar_area'),
+    path('gestao-usuarios/', accounts_views.gestao_usuarios, name='gestao_usuarios_area'),
     path('processos/', include('processos.urls')),
     path('agenda/', include('agenda.urls')),
     path('jurisprudencia/', include('jurisprudencia.urls')),

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import Usuario
+from .models import Usuario, UsuarioAtividadeLog
 
 
 @admin.register(Usuario)
@@ -10,3 +10,11 @@ class UsuarioAdmin(UserAdmin):
     fieldsets = UserAdmin.fieldsets + (
         ('Dados do Escritório', {'fields': ('papel', 'oab', 'telefone', 'foto')}),
     )
+
+
+@admin.register(UsuarioAtividadeLog)
+class UsuarioAtividadeLogAdmin(admin.ModelAdmin):
+    list_display = ('criado_em', 'acao', 'autor', 'usuario', 'ip_endereco')
+    list_filter = ('acao', 'criado_em')
+    search_fields = ('detalhes', 'autor__username', 'usuario__username', 'rota', 'ip_endereco')
+    readonly_fields = ('criado_em',)

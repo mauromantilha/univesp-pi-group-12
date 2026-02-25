@@ -8,6 +8,7 @@ urlpatterns = [
     path('portal/', views.meu_portal, name='meu_portal'),
     path('portal/<int:pk>/', views.portal_usuario, name='portal_usuario'),
     path('perfil/', views.perfil, name='perfil'),
+    path('gestao-usuarios/', views.gestao_usuarios, name='gestao_usuarios'),
     path('usuarios/', views.lista_usuarios, name='lista_usuarios'),
     path('usuarios/novo/', views.novo_usuario, name='novo_usuario'),
     path('usuarios/<int:pk>/editar/', views.editar_usuario, name='editar_usuario'),

@@ -6,13 +6,70 @@
   <div class="card-body">
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
-      {% for field in form %}
-        <div class="mb-3">
-          <label class="form-label fw-semibold">{{ field.label }}</label>
-          {{ field }}
-          {% if field.errors %}<div class="text-danger small mt-1">{{ field.errors|join:" " }}</div>{% endif %}
+      {% if form.non_field_errors %}
+      <div class="alert alert-danger">{{ form.non_field_errors|join:" " }}</div>
+      {% endif %}
+
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.numero.label }}</label>
+          {{ form.numero }}
+          {% if form.numero.errors %}<div class="text-danger small mt-1">{{ form.numero.errors|join:" " }}</div>{% endif %}
         </div>
-      {% endfor %}
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.status.label }}</label>
+          {{ form.status }}
+          {% if form.status.errors %}<div class="text-danger small mt-1">{{ form.status.errors|join:" " }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="row g-3 mt-1">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.cliente.label }}</label>
+          {{ form.cliente }}
+          {% if form.cliente.errors %}<div class="text-danger small mt-1">{{ form.cliente.errors|join:" " }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.advogado.label }}</label>
+          {{ form.advogado }}
+          {% if form.advogado.errors %}<div class="text-danger small mt-1">{{ form.advogado.errors|join:" " }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="row g-3 mt-1">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.tipo.label }}</label>
+          {{ form.tipo }}
+          {% if form.tipo.errors %}<div class="text-danger small mt-1">{{ form.tipo.errors|join:" " }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.vara.label }}</label>
+          {{ form.vara }}
+          {% if form.vara.errors %}<div class="text-danger small mt-1">{{ form.vara.errors|join:" " }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label fw-semibold">{{ form.valor_causa.label }}</label>
+        {{ form.valor_causa }}
+        {% if form.valor_causa.errors %}<div class="text-danger small mt-1">{{ form.valor_causa.errors|join:" " }}</div>{% endif %}
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label fw-semibold">{{ form.objeto.label }}</label>
+        {{ form.objeto }}
+        {% if form.objeto.errors %}<div class="text-danger small mt-1">{{ form.objeto.errors|join:" " }}</div>{% endif %}
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label fw-semibold">{{ form.arquivos.label }}</label>
+        <div class="border rounded p-3 bg-light">
+          {{ form.arquivos }}
+          <div class="form-text">Área de upload múltiplo de documentos do processo.</div>
+        </div>
+        {% if form.arquivos.errors %}<div class="text-danger small mt-1">{{ form.arquivos.errors|join:" " }}</div>{% endif %}
+      </div>
+
       <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i> Salvar</button>
         <a href="{% url 'lista_processos' %}" class="btn btn-outline-secondary">Cancelar</a>

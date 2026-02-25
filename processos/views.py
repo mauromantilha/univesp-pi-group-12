@@ -1,9 +1,10 @@
+from django import forms
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Q
 from accounts.permissions import usuario_pode_escrever
-from .models import Cliente, Processo, ProcessoArquivo, Movimentacao, Comarca, Vara, TipoProcesso
+from .models import Cliente, Processo, ProcessoArquivo, ClienteArquivo, Movimentacao, Comarca, Vara, TipoProcesso
 from .forms import (
     ClienteForm, ProcessoForm, ProcessoArquivoUploadForm, MovimentacaoForm,
     ComarcaForm, VaraForm, TipoProcessoForm
@@ -12,6 +13,12 @@ from .forms import (
 
 def _pode_acessar_processo(usuario, processo):
     return usuario.is_administrador() or processo.advogado_id == usuario.id
+
+
+def _pode_acessar_cliente(usuario, cliente):
+    if usuario.is_administrador():
+        return True
+    return cliente.processos.filter(advogado=usuario).exists() or cliente.responsavel_id == usuario.id
 
 
 def _somente_administrador(request):
@@ -38,6 +45,24 @@ def _salvar_arquivos_processo(processo, arquivos, usuario):
         )
 
 
+def _salvar_arquivos_cliente(cliente, arquivos, usuario):
+    for arquivo in arquivos:
+        ClienteArquivo.objects.create(
+            cliente=cliente,
+            arquivo=arquivo,
+            nome_original=arquivo.name,
+            enviado_por=usuario,
+        )
+
+
+def _aplicar_escopo_form_cliente(form, usuario):
+    if usuario.is_administrador():
+        return
+    form.fields['responsavel'].queryset = form.fields['responsavel'].queryset.filter(pk=usuario.pk)
+    form.fields['responsavel'].initial = usuario
+    form.fields['responsavel'].widget = forms.HiddenInput()
+
+
 # ─── Clientes ────────────────────────────────────────────────────────────────
 
 @login_required
@@ -46,7 +71,9 @@ def lista_clientes(request):
     if request.user.is_administrador():
         clientes = Cliente.objects.all()
     else:
-        clientes = Cliente.objects.filter(processos__advogado=request.user).distinct()
+        clientes = Cliente.objects.filter(
+            Q(processos__advogado=request.user) | Q(responsavel=request.user)
+        ).distinct()
     if q:
         clientes = clientes.filter(nome__icontains=q)
     return render(request, 'processos/lista_clientes.html', {'clientes': clientes, 'q': q})
@@ -55,10 +82,11 @@ def lista_clientes(request):
 @login_required
 def detalhe_cliente(request, pk):
     cliente = get_object_or_404(Cliente, pk=pk)
-    if not request.user.is_administrador() and not cliente.processos.filter(advogado=request.user).exists():
+    if not _pode_acessar_cliente(request.user, cliente):
         messages.error(request, 'Acesso negado.')
         return redirect('lista_clientes')
-    return render(request, 'processos/detalhe_cliente.html', {'cliente': cliente})
+    arquivos_cliente = cliente.arquivos.select_related('enviado_por').all()
+    return render(request, 'processos/detalhe_cliente.html', {'cliente': cliente, 'arquivos_cliente': arquivos_cliente})
 
 
 @login_required
@@ -66,11 +94,21 @@ def novo_cliente(request):
     bloqueio = _somente_escrita_permitida(request)
     if bloqueio:
         return bloqueio
-    form = ClienteForm(request.POST or None)
+    form = ClienteForm(request.POST or None, request.FILES or None)
+    _aplicar_escopo_form_cliente(form, request.user)
     if request.method == 'POST' and form.is_valid():
-        form.save()
+        cliente = form.save(commit=False)
+        if not request.user.is_administrador():
+            cliente.responsavel = request.user
+        cliente.save()
+        form.save_m2m()
+        _salvar_arquivos_cliente(
+            cliente=cliente,
+            arquivos=form.cleaned_data.get('documentos', []),
+            usuario=request.user,
+        )
         messages.success(request, 'Cliente cadastrado com sucesso.')
-        return redirect('lista_clientes')
+        return redirect('detalhe_cliente', pk=cliente.pk)
     return render(request, 'processos/form_cliente.html', {'form': form, 'titulo': 'Novo Cliente'})
 
 
@@ -80,12 +118,22 @@ def editar_cliente(request, pk):
     if bloqueio:
         return bloqueio
     cliente = get_object_or_404(Cliente, pk=pk)
-    if not request.user.is_administrador() and not cliente.processos.filter(advogado=request.user).exists():
+    if not _pode_acessar_cliente(request.user, cliente):
         messages.error(request, 'Acesso negado.')
         return redirect('lista_clientes')
-    form = ClienteForm(request.POST or None, instance=cliente)
+    form = ClienteForm(request.POST or None, request.FILES or None, instance=cliente)
+    _aplicar_escopo_form_cliente(form, request.user)
     if request.method == 'POST' and form.is_valid():
-        form.save()
+        cliente = form.save(commit=False)
+        if not request.user.is_administrador():
+            cliente.responsavel = request.user
+        cliente.save()
+        form.save_m2m()
+        _salvar_arquivos_cliente(
+            cliente=cliente,
+            arquivos=form.cleaned_data.get('documentos', []),
+            usuario=request.user,
+        )
         messages.success(request, 'Cliente atualizado com sucesso.')
         return redirect('detalhe_cliente', pk=pk)
     return render(request, 'processos/form_cliente.html', {'form': form, 'titulo': 'Editar Cliente', 'objeto': cliente})
@@ -140,7 +188,9 @@ def novo_processo(request):
     form = ProcessoForm(request.POST or None, request.FILES or None)
     if not request.user.is_administrador():
         form.fields['cliente'].queryset = Cliente.objects.filter(
-            Q(processos__advogado=request.user) | Q(processos__isnull=True)
+            Q(processos__advogado=request.user)
+            | Q(processos__isnull=True, responsavel=request.user)
+            | Q(responsavel=request.user)
         ).distinct()
         form.fields['advogado'].queryset = form.fields['advogado'].queryset.filter(pk=request.user.pk)
         form.fields['advogado'].initial = request.user
@@ -171,7 +221,9 @@ def editar_processo(request, pk):
     form = ProcessoForm(request.POST or None, request.FILES or None, instance=processo)
     if not request.user.is_administrador():
         form.fields['cliente'].queryset = Cliente.objects.filter(
-            Q(processos__advogado=request.user) | Q(processos__isnull=True)
+            Q(processos__advogado=request.user)
+            | Q(processos__isnull=True, responsavel=request.user)
+            | Q(responsavel=request.user)
         ).distinct()
         form.fields['advogado'].queryset = form.fields['advogado'].queryset.filter(pk=request.user.pk)
         form.fields['advogado'].initial = request.user
