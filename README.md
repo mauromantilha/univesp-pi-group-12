@@ -1,137 +1,73 @@
-# CRM para Escritório de Advocacia – UNIVESP PI Grupo 12
+# CRM Jurídico - UNIVESP PI Grupo 12
 
-Sistema de gerenciamento de escritório de advocacia desenvolvido com Django (Python).
+Plataforma de gestão para escritórios de advocacia com frontend React (SPA) e backend Django REST, incluindo processos, clientes, agenda, documentos, consulta tribunais, IA, financeiro e gestão de usuários.
 
-## Módulos Implementados
+## Documentação
 
-### Módulo 1 – Administração e Perfis
-- Gestão de usuários (advogados, estagiários, administradores)
-- Controle de Acesso por papel (RBAC)
-- Dashboard personalizado por papel
+- Documentação completa: [docs/README_COMPLETO.md](docs/README_COMPLETO.md)
 
-### Módulo 2 – Gestão de Processos (Core)
-- Cadastro de clientes (PF/PJ)
-- Ficha do processo com número, cliente, advogado, vara, status
-- Timeline de movimentações
-- Comarcas, Varas e Tipos de Processo
-- Visão de carga de trabalho dos advogados
+## Principais funcionalidades
 
-### Módulo 3 – Agenda e Prazos
-- Calendário de compromissos (audiências, reuniões, prazos fatais)
-- Alertas de prazos próximos (7 dias)
-- Vinculação automática ao processo
+- Dashboard com indicadores reais (processos, clientes, eventos e prazos).
+- Gestão de clientes e processos com segregação por advogado.
+- Área centralizada de documentos com upload múltiplo e visualização em iframe.
+- Agenda e prazos jurídicos.
+- Consulta de tribunais (DataJud) com suporte de IA.
+- Financeiro com lançamentos, contas, categorias e anexos.
+- Gestão de usuários com auditoria e logs de atividades.
 
-### Módulo 4 – Inteligência e Jurisprudência
-- Repositório de sentenças, acórdãos e teses
-- Busca textual em conteúdo, título e tags
-- Filtro por categoria e tribunal
+## Stack
 
-### Módulo 5 – IA Preditiva
-- Análise de risco por tipo/vara com base no histórico
-- Sugestão automática de jurisprudência por processo
-- Busca inteligente no repositório
+- Backend: Python, Django, Django REST Framework, JWT.
+- Frontend: React, Vite, Axios, Tailwind.
+- Banco: SQLite (dev) e PostgreSQL/RDS (produção).
 
-## Como executar (local)
+## Execução rápida (desenvolvimento)
+
+### 1) Backend
 
 ```bash
-# Instalar dependências
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-
-# Aplicar migrações
 python manage.py migrate
-
-# Criar dados de demonstração
 python manage.py seed_demo
-
-# Iniciar servidor (localhost)
-python manage.py runserver
-```
-
-Acesse `http://localhost:8000` e entre com:
-- **Admin**: `admin` / `admin123`
-- **Advogado**: `adv1` / `senha123`
-
-## Deploy em servidor remoto (EC2 / VPS)
-
-### 1. Iniciar o servidor acessível externamente
-
-```bash
-# Bind em todas as interfaces (necessário para acesso externo)
 python manage.py runserver 0.0.0.0:8000
 ```
 
-### 2. IP mudou? Siga estes passos
+### 2) Frontend
 
 ```bash
-# 1. No servidor, descubra o novo IP público
-curl -s ifconfig.me
-
-# 2. Reinicie o servidor com o novo IP
-python manage.py runserver 0.0.0.0:8000
-
-# 3. Acesse via nip.io substituindo SEU_IP pelo IP atual
-# http://SEU_IP.nip.io:8000/login
+cd frontend
+npm install
+npm run dev
 ```
 
-### 3. Definir CSRF_TRUSTED_ORIGINS (importante para nip.io)
+Acessos:
 
-Quando acessado por URL pública (nip.io ou domínio), defina a variável de ambiente **antes** de iniciar o servidor:
+- Frontend: `http://localhost:5173`
+- API: `http://127.0.0.1:8000/api/v1/`
+
+Credenciais demo:
+
+- Admin: `admin` / `admin123`
+- Advogado: `adv1` / `senha123`
+
+## Build de produção
 
 ```bash
-export CSRF_TRUSTED_ORIGINS=http://SEU_IP.nip.io:8000
-python manage.py runserver 0.0.0.0:8000
+cd frontend
+npm run build
 ```
 
-Ou em linha única:
+## API base
 
-```bash
-CSRF_TRUSTED_ORIGINS=http://15.228.99.99.nip.io:8000 python manage.py runserver 0.0.0.0:8000
+Todos os endpoints ficam sob:
+
+```text
+/api/v1/
 ```
 
-### 5. Esqueceu a senha / senha não aceita?
+## Licença
 
-Execute no servidor para redefinir a senha do admin:
-
-```bash
-python manage.py shell -c "
-from accounts.models import Usuario
-u = Usuario.objects.get(username='admin')
-u.set_password('admin123')
-u.save()
-print('Senha redefinida com sucesso!')
-"
-```
-
-Ou use o comando nativo do Django para qualquer usuário:
-
-```bash
-python manage.py changepassword admin
-```
-
-O `seed_demo` também redefine as senhas se executado novamente:
-
-```bash
-python manage.py seed_demo
-# admin -> admin123 | adv1..adv5 -> senha123
-```
-
-
-### 6. Manter o servidor rodando em segundo plano (nohup)
-
-```bash
-export CSRF_TRUSTED_ORIGINS=http://SEU_IP.nip.io:8000
-nohup python manage.py runserver 0.0.0.0:8000 > crm.log 2>&1 &
-echo "Servidor iniciado. PID: $!"
-```
-
-Para parar:
-
-```bash
-pkill -f "manage.py runserver"
-```
-
-## Tecnologias
-- Python 3 / Django 6
-- Bootstrap 5 (local)
-- SQLite (desenvolvimento)
-- Whitenoise (arquivos estáticos)
+Projeto acadêmico UNIVESP (PI - Grupo 12).

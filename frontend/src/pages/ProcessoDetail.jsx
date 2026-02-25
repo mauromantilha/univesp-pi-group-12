@@ -173,10 +173,15 @@ export default function ProcessoDetail() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <button onClick={() => navigate("/processos")} className="hover:text-primary-600">Processos</button>
-        <span>/</span>
-        <span className="text-gray-800 font-medium">{processo.numero}</span>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <button onClick={() => navigate("/processos")} className="hover:text-primary-600">Processos</button>
+          <span>/</span>
+          <span className="text-gray-800 font-medium">{processo.numero}</span>
+        </div>
+        <button onClick={() => navigate("/processos")} className="btn-secondary text-sm">
+          ← Voltar
+        </button>
       </div>
 
       <div className="card">

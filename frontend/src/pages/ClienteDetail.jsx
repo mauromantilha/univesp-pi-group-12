@@ -155,10 +155,15 @@ export default function ClienteDetail() {
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <button onClick={() => navigate("/clientes")} className="hover:text-primary-600">Clientes</button>
-        <span>/</span>
-        <span className="text-gray-800 font-medium truncate">{cliente.nome}</span>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <button onClick={() => navigate("/clientes")} className="hover:text-primary-600">Clientes</button>
+          <span>/</span>
+          <span className="text-gray-800 font-medium truncate">{cliente.nome}</span>
+        </div>
+        <button onClick={() => navigate("/clientes")} className="btn-secondary text-sm">
+          ← Voltar
+        </button>
       </div>
 
       <div className="card">
