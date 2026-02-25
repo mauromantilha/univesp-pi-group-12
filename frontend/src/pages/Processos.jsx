@@ -88,7 +88,10 @@ export default function Processos() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">⚖️ Processos</h1>
-        <button onClick={openModal} className="btn-primary gap-2">+ Novo Processo</button>
+        <div className="flex gap-2">
+          <button onClick={() => navigate("/documentos")} className="btn-secondary">Documentos</button>
+          <button onClick={openModal} className="btn-primary gap-2">+ Novo Processo</button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -246,6 +249,10 @@ export default function Processos() {
                 <label className="label">Descrição / Resumo</label>
                 <textarea className="input" rows={3} value={form.descricao}
                   onChange={(e) => setForm({ ...form, descricao: e.target.value })} />
+              </div>
+
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
+                Upload de documentos foi centralizado na área <strong>Documentos</strong>.
               </div>
 
               <div className="flex gap-3 justify-end pt-2">

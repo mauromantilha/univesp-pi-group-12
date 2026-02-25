@@ -61,13 +61,8 @@
         {% if form.objeto.errors %}<div class="text-danger small mt-1">{{ form.objeto.errors|join:" " }}</div>{% endif %}
       </div>
 
-      <div class="mt-3">
-        <label class="form-label fw-semibold">{{ form.arquivos.label }}</label>
-        <div class="border rounded p-3 bg-light">
-          {{ form.arquivos }}
-          <div class="form-text">Área de upload múltiplo de documentos do processo.</div>
-        </div>
-        {% if form.arquivos.errors %}<div class="text-danger small mt-1">{{ form.arquivos.errors|join:" " }}</div>{% endif %}
+      <div class="alert alert-info mt-3 mb-0">
+        O upload de documentos foi centralizado na área <strong>Documentos</strong> da interface React.
       </div>
 
       <div class="d-flex gap-2">

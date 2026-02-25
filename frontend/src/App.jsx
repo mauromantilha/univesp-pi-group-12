@@ -14,6 +14,7 @@ import Lancamentos from "./pages/Lancamentos";
 import ContasExtrato from "./pages/ContasExtrato";
 import ConsultaTribunais from "./pages/ConsultaTribunais";
 import GestaoUsuarios from "./pages/GestaoUsuarios";
+import Documentos from "./pages/Documentos";
 
 function PrivateRoute({ children }) {
   const { token } = useAuth();
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="processos" element={<Processos />} />
           <Route path="processos/:id" element={<ProcessoDetail />} />
           <Route path="clientes" element={<Clientes />} />
+          <Route path="documentos" element={<Documentos />} />
           <Route path="agenda" element={<Agenda />} />
           <Route path="jurisprudencia" element={<Jurisprudencia />} />
           <Route path="ia" element={<IAPreditiva />} />

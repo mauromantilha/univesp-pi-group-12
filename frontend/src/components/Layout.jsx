@@ -6,6 +6,7 @@ const navBase = [
   { to: "/dashboard", icon: "📊", label: "Dashboard" },
   { to: "/processos", icon: "⚖️", label: "Processos" },
   { to: "/clientes", icon: "👥", label: "Clientes" },
+  { to: "/documentos", icon: "📂", label: "Documentos" },
   { to: "/agenda", icon: "📅", label: "Agenda" },
   { to: "/jurisprudencia", icon: "📚", label: "Jurisprudência" },
   { to: "/consulta-tribunais", icon: "🏛️", label: "Consulta Tribunais" },

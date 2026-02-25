@@ -74,13 +74,8 @@
         {% if form.processos_possiveis.errors %}<div class="text-danger small mt-1">{{ form.processos_possiveis.errors|join:" " }}</div>{% endif %}
       </div>
 
-      <div class="mt-3">
-        <label class="form-label fw-semibold">{{ form.documentos.label }}</label>
-        <div class="border rounded p-3 bg-light">
-          {{ form.documentos }}
-          <div class="form-text">Selecione múltiplos arquivos para anexar documentos do cliente.</div>
-        </div>
-        {% if form.documentos.errors %}<div class="text-danger small mt-1">{{ form.documentos.errors|join:" " }}</div>{% endif %}
+      <div class="alert alert-info mt-3 mb-0">
+        O upload de documentos foi centralizado na área <strong>Documentos</strong> da interface React.
       </div>
 
       <div class="mt-3">

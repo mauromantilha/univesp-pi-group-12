@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import toast from "react-hot-toast";
 
@@ -38,6 +39,7 @@ const EMPTY_FORM = {
 };
 
 export default function Clientes() {
+  const navigate = useNavigate();
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -136,7 +138,10 @@ export default function Clientes() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">👥 Clientes</h1>
-        <button onClick={openCreate} className="btn-primary">+ Novo Cliente</button>
+        <div className="flex gap-2">
+          <button onClick={() => navigate("/documentos")} className="btn-secondary">Documentos</button>
+          <button onClick={openCreate} className="btn-primary">+ Novo Cliente</button>
+        </div>
       </div>
 
       <input
@@ -347,6 +352,10 @@ export default function Clientes() {
               <div>
                 <label className="label">Observações</label>
                 <textarea className="input" rows={2} value={form.observacoes} onChange={(e) => set("observacoes", e.target.value)} />
+              </div>
+
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
+                Upload de documentos foi centralizado na área <strong>Documentos</strong>.
               </div>
 
               <div className="flex gap-3 justify-end pt-2">
