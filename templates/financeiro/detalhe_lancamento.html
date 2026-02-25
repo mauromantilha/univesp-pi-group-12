@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Lançamento – {{ lancamento.descricao }}{% endblock %}
+{% block page_title %}Detalhe do Lançamento{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>{{ lancamento.descricao }}</strong>
+        <span class="badge
+          {% if lancamento.status == 'pago' %}bg-success
+          {% elif lancamento.status == 'atrasado' %}bg-danger
+          {% elif lancamento.status == 'pendente' %}bg-warning text-dark
+          {% else %}bg-secondary{% endif %}">
+          {{ lancamento.get_status_display }}
+        </span>
+      </div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-5">Tipo</dt>
+          <dd class="col-7">{{ lancamento.get_tipo_display }}</dd>
+
+          <dt class="col-5">Cliente</dt>
+          <dd class="col-7">
+            <a href="{% url 'detalhe_cliente' lancamento.cliente.pk %}">{{ lancamento.cliente.nome }}</a>
+          </dd>
+
+          <dt class="col-5">Processo</dt>
+          <dd class="col-7">
+            {% if lancamento.processo %}
+              <a href="{% url 'detalhe_processo' lancamento.processo.pk %}">{{ lancamento.processo.numero }}</a>
+            {% else %}–{% endif %}
+          </dd>
+
+          <dt class="col-5">Valor</dt>
+          <dd class="col-7 fw-bold fs-5">R$ {{ lancamento.valor }}</dd>
+
+          <dt class="col-5">Vencimento</dt>
+          <dd class="col-7">{{ lancamento.data_vencimento|date:"d/m/Y" }}</dd>
+
+          <dt class="col-5">Pagamento</dt>
+          <dd class="col-7">{{ lancamento.data_pagamento|date:"d/m/Y"|default:"–" }}</dd>
+
+          {% if lancamento.observacoes %}
+          <dt class="col-5">Observações</dt>
+          <dd class="col-7">{{ lancamento.observacoes }}</dd>
+          {% endif %}
+
+          <dt class="col-5">Criado por</dt>
+          <dd class="col-7">{{ lancamento.criado_por.get_full_name|default:lancamento.criado_por.username|default:"–" }}</dd>
+
+          <dt class="col-5">Criado em</dt>
+          <dd class="col-7">{{ lancamento.criado_em|date:"d/m/Y H:i" }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header"><strong>Arquivos do Lançamento</strong></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'upload_arquivos_lancamento' lancamento.pk %}" enctype="multipart/form-data" class="mb-3">
+          {% csrf_token %}
+          <div class="mb-2">
+            {{ form_arquivos.arquivos }}
+            {% if form_arquivos.arquivos.errors %}<div class="text-danger small mt-1">{{ form_arquivos.arquivos.errors|join:" " }}</div>{% endif %}
+          </div>
+          <button type="submit" class="btn btn-sm btn-primary">
+            <i class="bi bi-upload me-1"></i> Enviar Arquivos
+          </button>
+        </form>
+
+        <ul class="list-group list-group-flush">
+          {% for a in arquivos %}
+          <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+            <div>
+              <a href="{{ a.arquivo.url }}" target="_blank" rel="noopener">{{ a.nome_original|default:a.arquivo.name }}</a>
+              <div class="small text-muted">
+                enviado por {{ a.enviado_por.get_full_name|default:a.enviado_por.username|default:"–" }}
+                em {{ a.criado_em|date:"d/m/Y H:i" }}
+              </div>
+            </div>
+          </li>
+          {% empty %}
+          <li class="list-group-item px-0 text-muted">Nenhum arquivo anexado ao lançamento.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mt-3 d-flex gap-2">
+  <a href="{% url 'editar_lancamento' lancamento.pk %}" class="btn btn-primary btn-sm">
+    <i class="bi bi-pencil me-1"></i> Editar
+  </a>
+  <a href="{% url 'lista_lancamentos' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i> Voltar
+  </a>
+</div>
+{% endblock %}

@@ -62,6 +62,31 @@ class DashboardTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class PortalUsuarioTest(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.admin = Usuario.objects.create_user(username='admin_portal', password='pass', papel='administrador')
+        self.adv1 = Usuario.objects.create_user(username='adv_portal_1', password='pass', papel='advogado')
+        self.adv2 = Usuario.objects.create_user(username='adv_portal_2', password='pass', papel='advogado')
+
+    def test_advogado_acessa_proprio_portal(self):
+        self.client.login(username='adv_portal_1', password='pass')
+        response = self.client.get(reverse('meu_portal'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Portal de')
+
+    def test_advogado_nao_acessa_portal_de_outro(self):
+        self.client.login(username='adv_portal_1', password='pass')
+        response = self.client.get(reverse('portal_usuario', args=[self.adv2.pk]))
+        self.assertRedirects(response, reverse('meu_portal'))
+
+    def test_admin_acessa_portal_de_qualquer_advogado(self):
+        self.client.login(username='admin_portal', password='pass')
+        response = self.client.get(reverse('portal_usuario', args=[self.adv1.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Portal de')
+
+
 class ProcessoViewTest(TestCase):
     def setUp(self):
         self.client = Client()

@@ -36,6 +36,11 @@
           <i class="bi bi-speedometer2 me-2"></i> Dashboard
         </a>
       </li>
+      <li class="nav-item">
+        <a class="nav-link {% if '/accounts/portal/' in request.path %}active{% endif %}" href="{% url 'meu_portal' %}">
+          <i class="bi bi-person-workspace me-2"></i> Meu Portal
+        </a>
+      </li>
 
       <div class="sidebar-section">Processos</div>
       <li class="nav-item">
@@ -70,6 +75,13 @@
       <li class="nav-item">
         <a class="nav-link {% if '/jurisprudencia/' in request.path %}active{% endif %}" href="{% url 'lista_documentos' %}">
           <i class="bi bi-journal-text me-2"></i> Repositório
+        </a>
+      </li>
+
+      <div class="sidebar-section">Financeiro</div>
+      <li class="nav-item">
+        <a class="nav-link {% if '/financeiro/' in request.path %}active{% endif %}" href="{% url 'lista_lancamentos' %}">
+          <i class="bi bi-cash-stack me-2"></i> Lançamentos
         </a>
       </li>
 

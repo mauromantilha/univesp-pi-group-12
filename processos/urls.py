@@ -13,6 +13,7 @@ urlpatterns = [
     path('<int:pk>/', views.detalhe_processo, name='detalhe_processo'),
     path('<int:pk>/editar/', views.editar_processo, name='editar_processo'),
     path('<int:processo_pk>/movimentacao/', views.nova_movimentacao, name='nova_movimentacao'),
+    path('<int:pk>/arquivos/upload/', views.upload_arquivos_processo, name='upload_arquivos_processo'),
     # Carga de trabalho
     path('carga-trabalho/', views.carga_trabalho, name='carga_trabalho'),
     # Entidades legais

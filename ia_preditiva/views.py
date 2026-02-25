@@ -1,6 +1,8 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
+from django.contrib import messages
+from accounts.permissions import usuario_pode_escrever
 from processos.models import Processo
 from jurisprudencia.models import Documento
 from .models import AnaliseRisco
@@ -37,7 +39,14 @@ def _calcular_probabilidade(processo):
 
 @login_required
 def analise_risco(request, processo_pk):
-    processo = get_object_or_404(Processo, pk=processo_pk)
+    if not usuario_pode_escrever(request.user):
+        messages.error(request, 'Somente advogados e administradores podem executar análise de risco.')
+        return redirect('dashboard')
+
+    processos_qs = Processo.objects.all()
+    if not request.user.is_administrador():
+        processos_qs = processos_qs.filter(advogado=request.user)
+    processo = get_object_or_404(processos_qs, pk=processo_pk)
 
     analise, _ = AnaliseRisco.objects.get_or_create(processo=processo)
 

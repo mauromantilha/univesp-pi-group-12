@@ -2,8 +2,20 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
+from accounts.permissions import usuario_pode_escrever
 from .models import Compromisso
 from .forms import CompromissoForm
+
+
+def _pode_acessar_compromisso(usuario, compromisso):
+    return usuario.is_administrador() or compromisso.advogado_id == usuario.id
+
+
+def _somente_escrita_permitida(request):
+    if usuario_pode_escrever(request.user):
+        return None
+    messages.error(request, 'Somente advogados e administradores podem alterar dados.')
+    return redirect('dashboard')
 
 
 @login_required
@@ -30,11 +42,19 @@ def calendario(request):
 
 @login_required
 def novo_compromisso(request):
+    bloqueio = _somente_escrita_permitida(request)
+    if bloqueio:
+        return bloqueio
     form = CompromissoForm(request.POST or None)
     if not request.user.is_administrador():
+        form.fields['processo'].queryset = form.fields['processo'].queryset.filter(advogado=request.user)
+        form.fields['advogado'].queryset = form.fields['advogado'].queryset.filter(pk=request.user.pk)
         form.fields['advogado'].initial = request.user
     if request.method == 'POST' and form.is_valid():
-        form.save()
+        compromisso = form.save(commit=False)
+        if not request.user.is_administrador():
+            compromisso.advogado = request.user
+        compromisso.save()
         messages.success(request, 'Compromisso cadastrado com sucesso.')
         return redirect('calendario')
     return render(request, 'agenda/form_compromisso.html', {'form': form, 'titulo': 'Novo Compromisso'})
@@ -42,10 +62,23 @@ def novo_compromisso(request):
 
 @login_required
 def editar_compromisso(request, pk):
+    bloqueio = _somente_escrita_permitida(request)
+    if bloqueio:
+        return bloqueio
     compromisso = get_object_or_404(Compromisso, pk=pk)
+    if not _pode_acessar_compromisso(request.user, compromisso):
+        messages.error(request, 'Acesso negado.')
+        return redirect('calendario')
     form = CompromissoForm(request.POST or None, instance=compromisso)
+    if not request.user.is_administrador():
+        form.fields['processo'].queryset = form.fields['processo'].queryset.filter(advogado=request.user)
+        form.fields['advogado'].queryset = form.fields['advogado'].queryset.filter(pk=request.user.pk)
+        form.fields['advogado'].initial = request.user
     if request.method == 'POST' and form.is_valid():
-        form.save()
+        compromisso = form.save(commit=False)
+        if not request.user.is_administrador():
+            compromisso.advogado = request.user
+        compromisso.save()
         messages.success(request, 'Compromisso atualizado.')
         return redirect('calendario')
     return render(request, 'agenda/form_compromisso.html', {'form': form, 'titulo': 'Editar Compromisso', 'objeto': compromisso})
@@ -53,7 +86,13 @@ def editar_compromisso(request, pk):
 
 @login_required
 def excluir_compromisso(request, pk):
+    bloqueio = _somente_escrita_permitida(request)
+    if bloqueio:
+        return bloqueio
     compromisso = get_object_or_404(Compromisso, pk=pk)
+    if not _pode_acessar_compromisso(request.user, compromisso):
+        messages.error(request, 'Acesso negado.')
+        return redirect('calendario')
     if request.method == 'POST':
         compromisso.delete()
         messages.success(request, 'Compromisso removido.')

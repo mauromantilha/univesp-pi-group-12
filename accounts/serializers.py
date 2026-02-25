@@ -12,6 +12,12 @@ class UsuarioSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
 
+class UsuarioSelfUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Usuario
+        fields = ['first_name', 'last_name', 'email', 'telefone', 'foto']
+
+
 class UsuarioCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True)
     

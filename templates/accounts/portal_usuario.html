@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo_portal }} – CRM Advocacia{% endblock %}
+{% block page_title %}{{ titulo_portal }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h5 class="mb-1">{{ titulo_portal }}</h5>
+    <p class="text-muted mb-0">{{ subtitulo_portal }}</p>
+  </div>
+  {% if usuario_alvo %}
+    <span class="badge bg-{% if usuario_alvo.papel == 'administrador' %}danger{% elif usuario_alvo.papel == 'advogado' %}primary{% else %}secondary{% endif %}">
+      {{ usuario_alvo.get_papel_display }}
+    </span>
+  {% endif %}
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
+    <div class="card text-bg-primary">
+      <div class="card-body">
+        <div class="fs-4 fw-bold">{{ processos_ativos }}</div>
+        <div>Processos Ativos</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-bg-success">
+      <div class="card-body">
+        <div class="fs-4 fw-bold">{{ compromissos_hoje }}</div>
+        <div>Compromissos Hoje</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-bg-danger">
+      <div class="card-body">
+        <div class="fs-4 fw-bold">{{ prazos_7_dias }}</div>
+        <div>Prazos (7 dias)</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-bg-dark">
+      <div class="card-body">
+        <div class="fs-4 fw-bold">{{ total_processos }}</div>
+        <div>Total de Processos</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card border-0 bg-warning bg-opacity-10">
+      <div class="card-body py-3">
+        <div class="text-muted small">Financeiro Pendente</div>
+        <div class="fs-5 fw-bold text-warning">R$ {{ financeiro_pendente }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 bg-danger bg-opacity-10">
+      <div class="card-body py-3">
+        <div class="text-muted small">Financeiro Atrasado</div>
+        <div class="fs-5 fw-bold text-danger">R$ {{ financeiro_atrasado }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 bg-success bg-opacity-10">
+      <div class="card-body py-3">
+        <div class="text-muted small">Financeiro Pago</div>
+        <div class="fs-5 fw-bold text-success">R$ {{ financeiro_pago }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header"><strong>Processos Recentes</strong></div>
+      <ul class="list-group list-group-flush">
+        {% for p in processos_recentes %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <a href="{% url 'detalhe_processo' p.pk %}">{{ p.numero }}</a>
+          <span class="badge bg-secondary">{{ p.get_status_display }}</span>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-muted text-center">Sem processos recentes.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header"><strong>Compromissos Próximos</strong></div>
+      <ul class="list-group list-group-flush">
+        {% for c in compromissos_proximos %}
+        <li class="list-group-item">
+          <div class="d-flex justify-content-between">
+            <span>{{ c.data|date:"d/m/Y" }}{% if c.hora %} {{ c.hora|time:"H:i" }}{% endif %}</span>
+            <span class="badge bg-{% if c.tipo == 'prazo' %}danger{% else %}secondary{% endif %}">{{ c.get_tipo_display }}</span>
+          </div>
+          <div class="small">{{ c.titulo }}</div>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-muted text-center">Sem compromissos próximos.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+{% if user.is_administrador %}
+<div class="card mt-3">
+  <div class="card-header"><strong>Portais dos Advogados</strong></div>
+  <div class="card-body">
+    <div class="row g-2">
+      {% for adv in advogados_portal %}
+      <div class="col-md-4">
+        <a class="btn btn-outline-primary w-100 text-start" href="{% url 'portal_usuario' adv.pk %}">
+          <i class="bi bi-person-badge me-2"></i>{{ adv.get_full_name|default:adv.username }}
+        </a>
+      </div>
+      {% empty %}
+      <div class="col-12 text-muted">Nenhum advogado cadastrado.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

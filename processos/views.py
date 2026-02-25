@@ -2,8 +2,40 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Q
-from .models import Cliente, Processo, Movimentacao, Comarca, Vara, TipoProcesso
-from .forms import ClienteForm, ProcessoForm, MovimentacaoForm, ComarcaForm, VaraForm, TipoProcessoForm
+from accounts.permissions import usuario_pode_escrever
+from .models import Cliente, Processo, ProcessoArquivo, Movimentacao, Comarca, Vara, TipoProcesso
+from .forms import (
+    ClienteForm, ProcessoForm, ProcessoArquivoUploadForm, MovimentacaoForm,
+    ComarcaForm, VaraForm, TipoProcessoForm
+)
+
+
+def _pode_acessar_processo(usuario, processo):
+    return usuario.is_administrador() or processo.advogado_id == usuario.id
+
+
+def _somente_administrador(request):
+    if request.user.is_administrador():
+        return None
+    messages.error(request, 'Acesso restrito a administradores.')
+    return redirect('dashboard')
+
+
+def _somente_escrita_permitida(request):
+    if usuario_pode_escrever(request.user):
+        return None
+    messages.error(request, 'Somente advogados e administradores podem alterar dados.')
+    return redirect('dashboard')
+
+
+def _salvar_arquivos_processo(processo, arquivos, usuario):
+    for arquivo in arquivos:
+        ProcessoArquivo.objects.create(
+            processo=processo,
+            arquivo=arquivo,
+            nome_original=arquivo.name,
+            enviado_por=usuario,
+        )
 
 
 # ─── Clientes ────────────────────────────────────────────────────────────────
@@ -11,18 +43,29 @@ from .forms import ClienteForm, ProcessoForm, MovimentacaoForm, ComarcaForm, Var
 @login_required
 def lista_clientes(request):
     q = request.GET.get('q', '')
-    clientes = Cliente.objects.filter(nome__icontains=q) if q else Cliente.objects.all()
+    if request.user.is_administrador():
+        clientes = Cliente.objects.all()
+    else:
+        clientes = Cliente.objects.filter(processos__advogado=request.user).distinct()
+    if q:
+        clientes = clientes.filter(nome__icontains=q)
     return render(request, 'processos/lista_clientes.html', {'clientes': clientes, 'q': q})
 
 
 @login_required
 def detalhe_cliente(request, pk):
     cliente = get_object_or_404(Cliente, pk=pk)
+    if not request.user.is_administrador() and not cliente.processos.filter(advogado=request.user).exists():
+        messages.error(request, 'Acesso negado.')
+        return redirect('lista_clientes')
     return render(request, 'processos/detalhe_cliente.html', {'cliente': cliente})
 
 
 @login_required
 def novo_cliente(request):
+    bloqueio = _somente_escrita_permitida(request)
+    if bloqueio:
+        return bloqueio
     form = ClienteForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -33,7 +76,13 @@ def novo_cliente(request):
 
 @login_required
 def editar_cliente(request, pk):
+    bloqueio = _somente_escrita_permitida(request)
+    if bloqueio:
+        return bloqueio
     cliente = get_object_or_404(Cliente, pk=pk)
+    if not request.user.is_administrador() and not cliente.processos.filter(advogado=request.user).exists():
+        messages.error(request, 'Acesso negado.')
+        return redirect('lista_clientes')
     form = ClienteForm(request.POST or None, instance=cliente)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -67,20 +116,44 @@ def lista_processos(request):
 @login_required
 def detalhe_processo(request, pk):
     processo = get_object_or_404(Processo, pk=pk)
+    if not _pode_acessar_processo(request.user, processo):
+        messages.error(request, 'Acesso negado.')
+        return redirect('lista_processos')
     movimentacoes = processo.movimentacoes.all()
     form_mov = MovimentacaoForm()
+    form_arquivos = ProcessoArquivoUploadForm()
+    arquivos_processo = processo.arquivos.select_related('enviado_por').all()
     return render(request, 'processos/detalhe_processo.html', {
         'processo': processo,
         'movimentacoes': movimentacoes,
+        'arquivos_processo': arquivos_processo,
         'form_mov': form_mov,
+        'form_arquivos': form_arquivos,
     })
 
 
 @login_required
 def novo_processo(request):
-    form = ProcessoForm(request.POST or None)
+    bloqueio = _somente_escrita_permitida(request)
+    if bloqueio:
+        return bloqueio
+    form = ProcessoForm(request.POST or None, request.FILES or None)
+    if not request.user.is_administrador():
+        form.fields['cliente'].queryset = Cliente.objects.filter(
+            Q(processos__advogado=request.user) | Q(processos__isnull=True)
+        ).distinct()
+        form.fields['advogado'].queryset = form.fields['advogado'].queryset.filter(pk=request.user.pk)
+        form.fields['advogado'].initial = request.user
     if request.method == 'POST' and form.is_valid():
-        form.save()
+        processo = form.save(commit=False)
+        if not request.user.is_administrador():
+            processo.advogado = request.user
+        processo.save()
+        _salvar_arquivos_processo(
+            processo=processo,
+            arquivos=form.cleaned_data.get('arquivos', []),
+            usuario=request.user,
+        )
         messages.success(request, 'Processo cadastrado com sucesso.')
         return redirect('lista_processos')
     return render(request, 'processos/form_processo.html', {'form': form, 'titulo': 'Novo Processo'})
@@ -88,10 +161,30 @@ def novo_processo(request):
 
 @login_required
 def editar_processo(request, pk):
+    bloqueio = _somente_escrita_permitida(request)
+    if bloqueio:
+        return bloqueio
     processo = get_object_or_404(Processo, pk=pk)
-    form = ProcessoForm(request.POST or None, instance=processo)
+    if not _pode_acessar_processo(request.user, processo):
+        messages.error(request, 'Acesso negado.')
+        return redirect('lista_processos')
+    form = ProcessoForm(request.POST or None, request.FILES or None, instance=processo)
+    if not request.user.is_administrador():
+        form.fields['cliente'].queryset = Cliente.objects.filter(
+            Q(processos__advogado=request.user) | Q(processos__isnull=True)
+        ).distinct()
+        form.fields['advogado'].queryset = form.fields['advogado'].queryset.filter(pk=request.user.pk)
+        form.fields['advogado'].initial = request.user
     if request.method == 'POST' and form.is_valid():
-        form.save()
+        processo = form.save(commit=False)
+        if not request.user.is_administrador():
+            processo.advogado = request.user
+        processo.save()
+        _salvar_arquivos_processo(
+            processo=processo,
+            arquivos=form.cleaned_data.get('arquivos', []),
+            usuario=request.user,
+        )
         messages.success(request, 'Processo atualizado com sucesso.')
         return redirect('detalhe_processo', pk=pk)
     return render(request, 'processos/form_processo.html', {'form': form, 'titulo': 'Editar Processo', 'objeto': processo})
@@ -99,7 +192,13 @@ def editar_processo(request, pk):
 
 @login_required
 def nova_movimentacao(request, processo_pk):
+    bloqueio = _somente_escrita_permitida(request)
+    if bloqueio:
+        return bloqueio
     processo = get_object_or_404(Processo, pk=processo_pk)
+    if not _pode_acessar_processo(request.user, processo):
+        messages.error(request, 'Acesso negado.')
+        return redirect('lista_processos')
     form = MovimentacaoForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
         mov = form.save(commit=False)
@@ -111,12 +210,39 @@ def nova_movimentacao(request, processo_pk):
     return render(request, 'processos/form_movimentacao.html', {'form': form, 'processo': processo})
 
 
+@login_required
+def upload_arquivos_processo(request, pk):
+    bloqueio = _somente_escrita_permitida(request)
+    if bloqueio:
+        return bloqueio
+
+    processo = get_object_or_404(Processo, pk=pk)
+    if not _pode_acessar_processo(request.user, processo):
+        messages.error(request, 'Acesso negado.')
+        return redirect('lista_processos')
+
+    if request.method != 'POST':
+        return redirect('detalhe_processo', pk=pk)
+
+    form = ProcessoArquivoUploadForm(request.POST, request.FILES)
+    if form.is_valid():
+        arquivos = form.cleaned_data.get('arquivos', [])
+        _salvar_arquivos_processo(processo=processo, arquivos=arquivos, usuario=request.user)
+        messages.success(request, f'{len(arquivos)} arquivo(s) enviado(s) com sucesso.')
+    else:
+        messages.error(request, 'Selecione ao menos um arquivo válido para upload.')
+    return redirect('detalhe_processo', pk=pk)
+
+
 # ─── Carga de trabalho ───────────────────────────────────────────────────────
 
 @login_required
 def carga_trabalho(request):
     from accounts.models import Usuario
-    advogados = Usuario.objects.filter(papel__in=['advogado', 'administrador'])
+    if request.user.is_administrador():
+        advogados = Usuario.objects.filter(papel__in=['advogado', 'administrador'])
+    else:
+        advogados = Usuario.objects.filter(pk=request.user.pk)
     dados = []
     for adv in advogados:
         dados.append({
@@ -131,12 +257,18 @@ def carga_trabalho(request):
 
 @login_required
 def lista_comarcas(request):
+    bloqueio = _somente_administrador(request)
+    if bloqueio:
+        return bloqueio
     comarcas = Comarca.objects.all()
     return render(request, 'processos/lista_comarcas.html', {'comarcas': comarcas})
 
 
 @login_required
 def nova_comarca(request):
+    bloqueio = _somente_administrador(request)
+    if bloqueio:
+        return bloqueio
     form = ComarcaForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -147,12 +279,18 @@ def nova_comarca(request):
 
 @login_required
 def lista_varas(request):
+    bloqueio = _somente_administrador(request)
+    if bloqueio:
+        return bloqueio
     varas = Vara.objects.select_related('comarca').all()
     return render(request, 'processos/lista_varas.html', {'varas': varas})
 
 
 @login_required
 def nova_vara(request):
+    bloqueio = _somente_administrador(request)
+    if bloqueio:
+        return bloqueio
     form = VaraForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -163,12 +301,18 @@ def nova_vara(request):
 
 @login_required
 def lista_tipos(request):
+    bloqueio = _somente_administrador(request)
+    if bloqueio:
+        return bloqueio
     tipos = TipoProcesso.objects.all()
     return render(request, 'processos/lista_tipos.html', {'tipos': tipos})
 
 
 @login_required
 def novo_tipo(request):
+    bloqueio = _somente_administrador(request)
+    if bloqueio:
+        return bloqueio
     form = TipoProcessoForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         form.save()

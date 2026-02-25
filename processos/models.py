@@ -95,6 +95,34 @@ class Processo(models.Model):
         return f'{self.numero} - {self.cliente}'
 
 
+class ProcessoArquivo(models.Model):
+    processo = models.ForeignKey(
+        Processo,
+        on_delete=models.CASCADE,
+        related_name='arquivos',
+        verbose_name='Processo',
+    )
+    arquivo = models.FileField(upload_to='processos/arquivos/', verbose_name='Arquivo')
+    nome_original = models.CharField(max_length=255, blank=True, verbose_name='Nome Original')
+    enviado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='arquivos_processo_enviados',
+        verbose_name='Enviado por',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Arquivo do Processo'
+        verbose_name_plural = 'Arquivos do Processo'
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return self.nome_original or self.arquivo.name
+
+
 class Movimentacao(models.Model):
     processo = models.ForeignKey(Processo, on_delete=models.CASCADE, related_name='movimentacoes', verbose_name='Processo')
     autor = models.ForeignKey(

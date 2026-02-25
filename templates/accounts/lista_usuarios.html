@@ -35,6 +35,7 @@
           <td>{% if u.is_active %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-x-circle text-danger"></i>{% endif %}</td>
           <td>
             <a href="{% url 'editar_usuario' u.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+            <a href="{% url 'portal_usuario' u.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-box-arrow-up-right"></i></a>
           </td>
         </tr>
         {% empty %}

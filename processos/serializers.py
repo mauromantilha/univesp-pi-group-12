@@ -32,11 +32,11 @@ class ClienteSerializer(serializers.ModelSerializer):
 
 
 class MovimentacaoSerializer(serializers.ModelSerializer):
-    usuario_nome = serializers.CharField(source='usuario.get_full_name', read_only=True)
-    
+    autor_nome = serializers.CharField(source='autor.get_full_name', read_only=True)
+
     class Meta:
         model = Movimentacao
-        fields = ['id', 'processo', 'data', 'descricao', 'usuario', 'usuario_nome']
+        fields = ['id', 'processo', 'data', 'titulo', 'descricao', 'autor', 'autor_nome']
 
 
 class ProcessoSerializer(serializers.ModelSerializer):
@@ -49,12 +49,12 @@ class ProcessoSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Processo
-        fields = ['id', 'numero', 'cliente', 'cliente_nome', 
-                  'advogado', 'advogado_nome', 
+        fields = ['id', 'numero', 'cliente', 'cliente_nome',
+                  'advogado', 'advogado_nome',
                   'tipo', 'tipo_nome', 'vara', 'vara_nome',
                   'status', 'status_display', 'objeto', 'valor_causa',
-                  'data_distribuicao', 'data_ultima_movimentacao',
-                  'observacoes', 'movimentacoes']
+                  'criado_em', 'atualizado_em',
+                  'movimentacoes']
 
 
 class ProcessoListSerializer(serializers.ModelSerializer):
@@ -68,4 +68,4 @@ class ProcessoListSerializer(serializers.ModelSerializer):
         model = Processo
         fields = ['id', 'numero', 'cliente_nome', 'advogado_nome', 
                   'tipo_nome', 'status', 'status_display', 
-                  'data_distribuicao', 'data_ultima_movimentacao']
+                  'criado_em', 'atualizado_em']

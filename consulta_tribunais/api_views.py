@@ -2,8 +2,9 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
-from django.core.cache import cache
 import os
+import logging
+from accounts.permissions import IsAdvogadoOuAdministradorWrite
 
 from .models import Tribunal, ConsultaProcesso, PerguntaProcesso
 from .serializers import (
@@ -12,6 +13,8 @@ from .serializers import (
 )
 from .services.datajud_service import DataJudService, formatar_dados_processo
 from .services.groq_service import GroqService
+
+logger = logging.getLogger(__name__)
 
 
 class TribunalViewSet(viewsets.ReadOnlyModelViewSet):
@@ -25,7 +28,7 @@ class ConsultaProcessoViewSet(viewsets.ModelViewSet):
     """ViewSet para consultas de processos"""
     queryset = ConsultaProcesso.objects.select_related('tribunal', 'usuario').prefetch_related('perguntas').all()
     serializer_class = ConsultaProcessoSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdvogadoOuAdministradorWrite]
     ordering_fields = ['data_consulta', 'numero_processo']
     
     def get_queryset(self):
@@ -61,7 +64,14 @@ class ConsultaProcessoViewSet(viewsets.ModelViewSet):
         # Remove filtros vazios
         filtros = {k: v for k, v in filtros.items() if v}
         
-        max_results = int(request.data.get('max_results', 20))
+        try:
+            max_results = int(request.data.get('max_results', 20))
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'max_results deve ser um número inteiro.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        max_results = max(1, min(max_results, 100))
         
         try:
             tribunal = Tribunal.objects.get(id=tribunal_id, ativo=True)
@@ -82,9 +92,10 @@ class ConsultaProcessoViewSet(viewsets.ModelViewSet):
                 'aviso': 'A API pública DataJud não possui dados de partes/advogados.'
             }, status=status.HTTP_200_OK)
             
-        except Exception as e:
+        except Exception:
+            logger.exception('Falha na busca avançada DataJud')
             return Response(
-                {'error': str(e)},
+                {'error': 'Falha ao consultar o tribunal no momento.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
@@ -98,6 +109,14 @@ class ConsultaProcessoViewSet(viewsets.ModelViewSet):
         numero_processo = serializer.validated_data['numero_processo']
         processo_vinculado_id = serializer.validated_data.get('processo_vinculado_id')
         analisar_com_ia = serializer.validated_data.get('analisar_com_ia', True)
+
+        if processo_vinculado_id and not request.user.is_administrador():
+            from processos.models import Processo
+            if not Processo.objects.filter(id=processo_vinculado_id, advogado=request.user).exists():
+                return Response(
+                    {'error': 'Processo vinculado inválido para o usuário.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
         
         try:
             tribunal = Tribunal.objects.get(id=tribunal_id, ativo=True)
@@ -143,22 +162,24 @@ class ConsultaProcessoViewSet(viewsets.ModelViewSet):
                         analise = groq.analisar_processo(dados_formatados)
                         consulta.analise_ia = analise
                         consulta.analise_atualizada_em = timezone.now()
-                except Exception as e:
+                except Exception:
+                    logger.exception('Falha ao gerar análise IA na consulta %s', consulta.id)
                     # Falha na IA não impede a consulta
-                    consulta.erro_mensagem = f"Aviso: Erro na análise IA: {str(e)}"
+                    consulta.erro_mensagem = 'Aviso: Falha ao gerar análise IA.'
             
             consulta.save()
             
             serializer = ConsultaProcessoSerializer(consulta)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
             
-        except Exception as e:
+        except Exception:
+            logger.exception('Falha ao consultar processo no DataJud')
             consulta.status = 'erro'
-            consulta.erro_mensagem = str(e)
+            consulta.erro_mensagem = 'Falha interna ao consultar tribunal.'
             consulta.save()
             
             return Response(
-                {'error': str(e)},
+                {'error': 'Falha ao consultar tribunal no momento.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
@@ -207,9 +228,10 @@ class ConsultaProcessoViewSet(viewsets.ModelViewSet):
             serializer = PerguntaProcessoSerializer(pergunta_obj)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
             
-        except Exception as e:
+        except Exception:
+            logger.exception('Falha ao responder pergunta na consulta %s', consulta.id)
             return Response(
-                {'error': f'Erro ao processar pergunta: {str(e)}'},
+                {'error': 'Não foi possível processar a pergunta no momento.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
@@ -243,8 +265,9 @@ class ConsultaProcessoViewSet(viewsets.ModelViewSet):
             serializer = ConsultaProcessoSerializer(consulta)
             return Response(serializer.data)
             
-        except Exception as e:
+        except Exception:
+            logger.exception('Falha ao reanalisar consulta %s', consulta.id)
             return Response(
-                {'error': f'Erro ao reanalisar: {str(e)}'},
+                {'error': 'Não foi possível reanalisar a consulta no momento.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

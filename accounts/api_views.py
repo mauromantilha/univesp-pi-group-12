@@ -1,58 +1,85 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
+from django.utils import timezone
+from datetime import timedelta
 from .models import Usuario
-from .serializers import UsuarioSerializer, UsuarioCreateSerializer
+from .serializers import UsuarioSerializer, UsuarioCreateSerializer, UsuarioSelfUpdateSerializer
 
 
 class UsuarioViewSet(viewsets.ModelViewSet):
     queryset = Usuario.objects.all()
     permission_classes = [permissions.IsAuthenticated]
-    
+
+    def get_queryset(self):
+        if self.request.user.is_administrador():
+            return Usuario.objects.all()
+        return Usuario.objects.filter(pk=self.request.user.pk)
+
     def get_serializer_class(self):
         if self.action == 'create':
             return UsuarioCreateSerializer
+        if self.action in ['update', 'partial_update'] and not self.request.user.is_administrador():
+            return UsuarioSelfUpdateSerializer
         return UsuarioSerializer
-    
+
+    def perform_create(self, serializer):
+        if not self.request.user.is_administrador():
+            raise PermissionDenied('Apenas administradores podem criar usuários.')
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if not self.request.user.is_administrador():
+            raise PermissionDenied('Apenas administradores podem excluir usuários.')
+        instance.delete()
+
     @action(detail=False, methods=['get'])
     def me(self, request):
         """Retorna dados do usuário autenticado"""
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
-    
-    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
-    def login(self, request):
-        """Login customizado que retorna JWT tokens"""
-        from django.contrib.auth import authenticate
-        
-        username = request.data.get('username')
-        password = request.data.get('password')
-        
-        if not username or not password:
-            return Response(
-                {'detail': 'Username e password são obrigatórios'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        user = authenticate(username=username, password=password)
-        
-        if user is None:
-            return Response(
-                {'detail': 'Credenciais inválidas'},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-        
-        if not user.is_active:
-            return Response(
-                {'detail': 'Usuário inativo'},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-        
-        refresh = RefreshToken.for_user(user)
-        
+
+    @action(detail=False, methods=['get'])
+    def dashboard(self, request):
+        """Resumo do dashboard para o usuário logado"""
+        from processos.models import Processo, Cliente
+        from agenda.models import Compromisso
+        hoje = timezone.now().date()
+        limite = hoje + timedelta(days=7)
+
+        if request.user.is_administrador():
+            processos_qs = Processo.objects.all()
+            clientes_qs = Cliente.objects.all()
+            compromissos_qs = Compromisso.objects.all()
+        else:
+            processos_qs = Processo.objects.filter(advogado=request.user)
+            clientes_qs = Cliente.objects.filter(processos__advogado=request.user).distinct()
+            compromissos_qs = Compromisso.objects.filter(advogado=request.user)
+
+        total_processos = processos_qs.count()
+        total_clientes = clientes_qs.count()
+        eventos_hoje = compromissos_qs.filter(
+            data=hoje,
+            status='pendente',
+        ).exclude(tipo='prazo').count()
+        prazos_proximos = compromissos_qs.filter(
+            data__gte=hoje,
+            data__lte=limite,
+            status='pendente',
+            tipo='prazo',
+        ).count()
+
         return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'user': UsuarioSerializer(user).data
+            # Mantido por compatibilidade do frontend SPA:
+            # card com label "Processos Ativos" usa esse campo.
+            'processos_ativos': total_processos,
+            'total_processos': total_processos,
+            'total_clientes': total_clientes,
+            'eventos_hoje': eventos_hoje,
+            'prazos_proximos': prazos_proximos,
+            # chaves legadas:
+            'compromissos_hoje': eventos_hoje,
+            'prazos_proximos_7_dias': prazos_proximos,
+            'usuario': UsuarioSerializer(request.user).data,
         })

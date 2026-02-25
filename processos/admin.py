@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Cliente, Processo, Movimentacao, Comarca, Vara, TipoProcesso
+from .models import Cliente, Processo, ProcessoArquivo, Movimentacao, Comarca, Vara, TipoProcesso
 
 
 @admin.register(Cliente)
@@ -20,6 +20,13 @@ class ProcessoAdmin(admin.ModelAdmin):
 class MovimentacaoAdmin(admin.ModelAdmin):
     list_display = ('processo', 'data', 'titulo', 'autor')
     list_filter = ('data',)
+
+
+@admin.register(ProcessoArquivo)
+class ProcessoArquivoAdmin(admin.ModelAdmin):
+    list_display = ('nome_original', 'processo', 'enviado_por', 'criado_em')
+    list_filter = ('criado_em',)
+    search_fields = ('nome_original', 'processo__numero')
 
 
 admin.site.register(Comarca)

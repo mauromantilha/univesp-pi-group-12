@@ -1,8 +1,24 @@
 from django import forms
-from .models import Cliente, Processo, Movimentacao, Comarca, Vara, TipoProcesso
+from .models import Cliente, Processo, ProcessoArquivo, Movimentacao, Comarca, Vara, TipoProcesso
 
 WIDGET_ATTRS = {'class': 'form-control'}
 SELECT_ATTRS = {'class': 'form-select'}
+
+
+class MultiFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultiFileField(forms.FileField):
+    widget = MultiFileInput
+
+    def clean(self, data, initial=None):
+        single_clean = super().clean
+        if data in self.empty_values:
+            return []
+        if isinstance(data, (list, tuple)):
+            return [single_clean(item, initial) for item in data]
+        return [single_clean(data, initial)]
 
 
 class ClienteForm(forms.ModelForm):
@@ -22,6 +38,12 @@ class ClienteForm(forms.ModelForm):
 
 
 class ProcessoForm(forms.ModelForm):
+    arquivos = MultiFileField(
+        required=False,
+        label='Arquivos do Processo',
+        widget=MultiFileInput(attrs={'class': 'form-control'}),
+    )
+
     class Meta:
         model = Processo
         fields = ['numero', 'cliente', 'advogado', 'tipo', 'vara', 'status', 'valor_causa', 'objeto']
@@ -76,3 +98,11 @@ class TipoProcessoForm(forms.ModelForm):
             'nome': forms.TextInput(attrs=WIDGET_ATTRS),
             'descricao': forms.Textarea(attrs={**WIDGET_ATTRS, 'rows': 2}),
         }
+
+
+class ProcessoArquivoUploadForm(forms.Form):
+    arquivos = MultiFileField(
+        required=True,
+        label='Anexar Arquivos',
+        widget=MultiFileInput(attrs={'class': 'form-control'}),
+    )
