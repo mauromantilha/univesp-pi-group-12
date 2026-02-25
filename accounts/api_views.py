@@ -2,10 +2,16 @@ from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
+from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
-from .models import Usuario
-from .serializers import UsuarioSerializer, UsuarioCreateSerializer, UsuarioSelfUpdateSerializer
+from .models import Usuario, UsuarioAtividadeLog
+from .serializers import (
+    UsuarioSerializer,
+    UsuarioCreateSerializer,
+    UsuarioSelfUpdateSerializer,
+    UsuarioAtividadeLogSerializer,
+)
 
 
 class UsuarioViewSet(viewsets.ModelViewSet):
@@ -83,3 +89,35 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             'prazos_proximos_7_dias': prazos_proximos,
             'usuario': UsuarioSerializer(request.user).data,
         })
+
+    @action(detail=False, methods=['get'])
+    def atividades(self, request):
+        """Atividades recentes para gestão de usuários."""
+        try:
+            limit = int(request.query_params.get('limit', 60))
+        except (TypeError, ValueError):
+            limit = 60
+        limit = max(1, min(limit, 300))
+
+        qs = UsuarioAtividadeLog.objects.select_related('autor', 'usuario')
+        if not request.user.is_administrador():
+            qs = qs.filter(Q(usuario=request.user) | Q(autor=request.user))
+
+        serializer = UsuarioAtividadeLogSerializer(qs[:limit], many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def auditoria(self, request):
+        """Logs de auditoria (admin vê tudo; demais usuários, apenas seus registros)."""
+        try:
+            limit = int(request.query_params.get('limit', 200))
+        except (TypeError, ValueError):
+            limit = 200
+        limit = max(1, min(limit, 500))
+
+        qs = UsuarioAtividadeLog.objects.select_related('autor', 'usuario')
+        if not request.user.is_administrador():
+            qs = qs.filter(Q(usuario=request.user) | Q(autor=request.user))
+
+        serializer = UsuarioAtividadeLogSerializer(qs[:limit], many=True)
+        return Response(serializer.data)

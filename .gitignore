@@ -38,3 +38,7 @@ frontend/.env.production
 
 # Reports
 relatorio_*.txt
+
+# Runtime backups / certs
+backups/
+config/global-bundle.pem

@@ -1,14 +1,24 @@
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
+from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from django.db.models import Q
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
-from .models import Comarca, Vara, TipoProcesso, Cliente, Processo, Movimentacao
+from .models import (
+    Comarca,
+    Vara,
+    TipoProcesso,
+    Cliente,
+    Processo,
+    Movimentacao,
+    ClienteArquivo,
+    ProcessoArquivo,
+)
 from .serializers import (
     ComarcaSerializer, VaraSerializer, TipoProcessoSerializer,
     ClienteSerializer, ProcessoSerializer, ProcessoListSerializer,
-    MovimentacaoSerializer
+    MovimentacaoSerializer, ClienteArquivoSerializer, ProcessoArquivoSerializer
 )
 
 
@@ -67,6 +77,36 @@ class ClienteViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Você não pode transferir responsável deste cliente.')
         responsavel_final = serializer.instance.responsavel or self.request.user
         serializer.save(responsavel=responsavel_final)
+
+    @action(detail=True, methods=['get', 'post'], url_path='arquivos')
+    def arquivos(self, request, pk=None):
+        cliente = self.get_object()
+        if request.method == 'GET':
+            qs = cliente.arquivos.select_related('enviado_por').all()
+            serializer = ClienteArquivoSerializer(qs, many=True, context={'request': request})
+            return Response(serializer.data)
+
+        arquivos = request.FILES.getlist('arquivos')
+        if not arquivos and request.FILES.get('arquivo'):
+            arquivos = [request.FILES.get('arquivo')]
+        if not arquivos:
+            return Response(
+                {'error': 'Nenhum arquivo enviado. Use o campo "arquivos".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        criados = []
+        for arquivo in arquivos:
+            criados.append(
+                ClienteArquivo.objects.create(
+                    cliente=cliente,
+                    arquivo=arquivo,
+                    nome_original=arquivo.name,
+                    enviado_por=request.user,
+                )
+            )
+        serializer = ClienteArquivoSerializer(criados, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class ProcessoViewSet(viewsets.ModelViewSet):
@@ -134,6 +174,36 @@ class ProcessoViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
+
+    @action(detail=True, methods=['get', 'post'], url_path='arquivos')
+    def arquivos(self, request, pk=None):
+        processo = self.get_object()
+        if request.method == 'GET':
+            qs = processo.arquivos.select_related('enviado_por').all()
+            serializer = ProcessoArquivoSerializer(qs, many=True, context={'request': request})
+            return Response(serializer.data)
+
+        arquivos = request.FILES.getlist('arquivos')
+        if not arquivos and request.FILES.get('arquivo'):
+            arquivos = [request.FILES.get('arquivo')]
+        if not arquivos:
+            return Response(
+                {'error': 'Nenhum arquivo enviado. Use o campo "arquivos".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        criados = []
+        for arquivo in arquivos:
+            criados.append(
+                ProcessoArquivo.objects.create(
+                    processo=processo,
+                    arquivo=arquivo,
+                    nome_original=arquivo.name,
+                    enviado_por=request.user,
+                )
+            )
+        serializer = ProcessoArquivoSerializer(criados, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class MovimentacaoViewSet(viewsets.ModelViewSet):

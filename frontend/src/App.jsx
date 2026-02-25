@@ -13,6 +13,7 @@ import DashboardFinanceiro from "./pages/DashboardFinanceiro";
 import Lancamentos from "./pages/Lancamentos";
 import ContasExtrato from "./pages/ContasExtrato";
 import ConsultaTribunais from "./pages/ConsultaTribunais";
+import GestaoUsuarios from "./pages/GestaoUsuarios";
 
 function PrivateRoute({ children }) {
   const { token } = useAuth();
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="financeiro" element={<DashboardFinanceiro />} />
           <Route path="financeiro/lancamentos" element={<Lancamentos />} />
           <Route path="financeiro/contas" element={<ContasExtrato />} />
+          <Route path="gestao-usuarios" element={<GestaoUsuarios />} />
         </Route>
         <Route path="*" element={<AppFallbackRoute />} />
       </Routes>

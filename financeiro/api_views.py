@@ -8,11 +8,12 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
-from .models import Lancamento, CategoriaFinanceira, ContaBancaria
+from .models import Lancamento, CategoriaFinanceira, ContaBancaria, LancamentoArquivo
 from .serializers import (
     LancamentoSerializer,
     CategoriaFinanceiraSerializer,
     ContaBancariaSerializer,
+    LancamentoArquivoSerializer,
 )
 
 
@@ -347,3 +348,33 @@ class LancamentoViewSet(viewsets.ModelViewSet):
             'atrasados': LancamentoSerializer(atrasados, many=True).data,
             'ultimos_pagos': LancamentoSerializer(recentes, many=True).data,
         })
+
+    @action(detail=True, methods=['get', 'post'], url_path='arquivos')
+    def arquivos(self, request, pk=None):
+        lancamento = self.get_object()
+        if request.method == 'GET':
+            qs = lancamento.arquivos.select_related('enviado_por').all()
+            serializer = LancamentoArquivoSerializer(qs, many=True, context={'request': request})
+            return Response(serializer.data)
+
+        arquivos = request.FILES.getlist('arquivos')
+        if not arquivos and request.FILES.get('arquivo'):
+            arquivos = [request.FILES.get('arquivo')]
+        if not arquivos:
+            return Response(
+                {'error': 'Nenhum arquivo enviado. Use o campo "arquivos".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        criados = []
+        for arquivo in arquivos:
+            criados.append(
+                LancamentoArquivo.objects.create(
+                    lancamento=lancamento,
+                    arquivo=arquivo,
+                    nome_original=arquivo.name,
+                    enviado_por=request.user,
+                )
+            )
+        serializer = LancamentoArquivoSerializer(criados, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)

@@ -8,6 +8,7 @@ from pathlib import Path
 import os
 import sys
 from datetime import timedelta
+from urllib.parse import parse_qs, unquote, urlparse
 try:
     from dotenv import load_dotenv
 except ModuleNotFoundError:
@@ -115,12 +116,72 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'crm_advocacia.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+def _build_postgres_db_config_from_url(database_url):
+    parsed = urlparse(database_url)
+    scheme = (parsed.scheme or '').lower()
+    engine_map = {
+        'postgres': 'django.db.backends.postgresql',
+        'postgresql': 'django.db.backends.postgresql',
+        'pgsql': 'django.db.backends.postgresql',
     }
-}
+    engine = engine_map.get(scheme, os.environ.get('DB_ENGINE', 'django.db.backends.postgresql'))
+    params = parse_qs(parsed.query or '')
+    sslmode = params.get('sslmode', [os.environ.get('DB_SSLMODE', 'require')])[0]
+    sslrootcert = params.get('sslrootcert', [os.environ.get('DB_SSLROOTCERT', '')])[0]
+
+    config = {
+        'ENGINE': engine,
+        'NAME': unquote((parsed.path or '').lstrip('/')),
+        'USER': unquote(parsed.username or ''),
+        'PASSWORD': unquote(parsed.password or ''),
+        'HOST': parsed.hostname or '',
+        'PORT': str(parsed.port or os.environ.get('DB_PORT', '5432')),
+    }
+
+    options = {}
+    if sslmode:
+        options['sslmode'] = sslmode
+    if sslrootcert:
+        options['sslrootcert'] = sslrootcert
+    if options:
+        config['OPTIONS'] = options
+    return config
+
+
+_database_url = os.environ.get('DATABASE_URL', '').strip()
+_use_postgres = _env_bool('USE_POSTGRES', False) or bool(_database_url)
+
+if _use_postgres:
+    if _database_url:
+        db_default = _build_postgres_db_config_from_url(_database_url)
+    else:
+        db_engine = os.environ.get('DB_ENGINE', 'django.db.backends.postgresql')
+        db_sslmode = os.environ.get('DB_SSLMODE', 'require').strip()
+        db_sslrootcert = os.environ.get('DB_SSLROOTCERT', '').strip()
+        db_default = {
+            'ENGINE': db_engine,
+            'NAME': os.environ.get('DB_NAME', ''),
+            'USER': os.environ.get('DB_USER', ''),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'HOST': os.environ.get('DB_HOST', ''),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+        }
+        options = {}
+        if db_sslmode:
+            options['sslmode'] = db_sslmode
+        if db_sslrootcert:
+            options['sslrootcert'] = db_sslrootcert
+        if options:
+            db_default['OPTIONS'] = options
+
+    DATABASES = {'default': db_default}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},

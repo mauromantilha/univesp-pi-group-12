@@ -2,7 +2,7 @@ import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 
-const nav = [
+const navBase = [
   { to: "/dashboard", icon: "📊", label: "Dashboard" },
   { to: "/processos", icon: "⚖️", label: "Processos" },
   { to: "/clientes", icon: "👥", label: "Clientes" },
@@ -16,6 +16,11 @@ const nav = [
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const isAdmin = user?.papel === "administrador";
+
+  const nav = isAdmin
+    ? [...navBase, { to: "/gestao-usuarios", icon: "🛡️", label: "Gestão Usuários" }]
+    : navBase;
 
   function handleLogout() {
     logout();

@@ -1,5 +1,14 @@
 from rest_framework import serializers
-from .models import Comarca, Vara, TipoProcesso, Cliente, Processo, Movimentacao
+from .models import (
+    Comarca,
+    Vara,
+    TipoProcesso,
+    Cliente,
+    Processo,
+    Movimentacao,
+    ClienteArquivo,
+    ProcessoArquivo,
+)
 
 
 class ComarcaSerializer(serializers.ModelSerializer):
@@ -50,6 +59,32 @@ class ClienteSerializer(serializers.ModelSerializer):
         return [tipo.nome for tipo in obj.processos_possiveis.all()]
 
 
+class ClienteArquivoSerializer(serializers.ModelSerializer):
+    arquivo_url = serializers.SerializerMethodField()
+    enviado_por_nome = serializers.CharField(source='enviado_por.get_full_name', read_only=True)
+
+    class Meta:
+        model = ClienteArquivo
+        fields = [
+            'id',
+            'cliente',
+            'arquivo',
+            'arquivo_url',
+            'nome_original',
+            'enviado_por',
+            'enviado_por_nome',
+            'criado_em',
+        ]
+
+    def get_arquivo_url(self, obj):
+        request = self.context.get('request')
+        if not obj.arquivo:
+            return None
+        if request:
+            return request.build_absolute_uri(obj.arquivo.url)
+        return obj.arquivo.url
+
+
 class MovimentacaoSerializer(serializers.ModelSerializer):
     autor_nome = serializers.CharField(source='autor.get_full_name', read_only=True)
 
@@ -74,6 +109,32 @@ class ProcessoSerializer(serializers.ModelSerializer):
                   'status', 'status_display', 'objeto', 'valor_causa',
                   'criado_em', 'atualizado_em',
                   'movimentacoes']
+
+
+class ProcessoArquivoSerializer(serializers.ModelSerializer):
+    arquivo_url = serializers.SerializerMethodField()
+    enviado_por_nome = serializers.CharField(source='enviado_por.get_full_name', read_only=True)
+
+    class Meta:
+        model = ProcessoArquivo
+        fields = [
+            'id',
+            'processo',
+            'arquivo',
+            'arquivo_url',
+            'nome_original',
+            'enviado_por',
+            'enviado_por_nome',
+            'criado_em',
+        ]
+
+    def get_arquivo_url(self, obj):
+        request = self.context.get('request')
+        if not obj.arquivo:
+            return None
+        if request:
+            return request.build_absolute_uri(obj.arquivo.url)
+        return obj.arquivo.url
 
 
 class ProcessoListSerializer(serializers.ModelSerializer):

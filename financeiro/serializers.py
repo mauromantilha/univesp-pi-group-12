@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Lancamento, CategoriaFinanceira, ContaBancaria
+from .models import Lancamento, CategoriaFinanceira, ContaBancaria, LancamentoArquivo
 
 
 class CategoriaFinanceiraSerializer(serializers.ModelSerializer):
@@ -67,3 +67,29 @@ class LancamentoSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'observacoes',
             'criado_em', 'atualizado_em',
         ]
+
+
+class LancamentoArquivoSerializer(serializers.ModelSerializer):
+    arquivo_url = serializers.SerializerMethodField()
+    enviado_por_nome = serializers.CharField(source='enviado_por.get_full_name', read_only=True)
+
+    class Meta:
+        model = LancamentoArquivo
+        fields = [
+            'id',
+            'lancamento',
+            'arquivo',
+            'arquivo_url',
+            'nome_original',
+            'enviado_por',
+            'enviado_por_nome',
+            'criado_em',
+        ]
+
+    def get_arquivo_url(self, obj):
+        request = self.context.get('request')
+        if not obj.arquivo:
+            return None
+        if request:
+            return request.build_absolute_uri(obj.arquivo.url)
+        return obj.arquivo.url
