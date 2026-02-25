@@ -44,6 +44,7 @@ class TipoProcesso(models.Model):
 class Cliente(models.Model):
     TIPO_CHOICES = [('pf', 'Pessoa Física'), ('pj', 'Pessoa Jurídica')]
     tipo = models.CharField(max_length=2, choices=TIPO_CHOICES, default='pf', verbose_name='Tipo')
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
     nome = models.CharField(max_length=200, verbose_name='Nome / Razão Social')
     responsavel = models.ForeignKey(
         settings.AUTH_USER_MODEL,

@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import Processos from "./pages/Processos";
 import ProcessoDetail from "./pages/ProcessoDetail";
 import Clientes from "./pages/Clientes";
+import ClienteDetail from "./pages/ClienteDetail";
 import Agenda from "./pages/Agenda";
 import Jurisprudencia from "./pages/Jurisprudencia";
 import IAPreditiva from "./pages/IAPreditiva";
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="processos" element={<Processos />} />
           <Route path="processos/:id" element={<ProcessoDetail />} />
           <Route path="clientes" element={<Clientes />} />
+          <Route path="clientes/:id" element={<ClienteDetail />} />
           <Route path="documentos" element={<Documentos />} />
           <Route path="agenda" element={<Agenda />} />
           <Route path="jurisprudencia" element={<Jurisprudencia />} />

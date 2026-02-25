@@ -42,6 +42,7 @@ class ClienteSerializer(serializers.ModelSerializer):
             'id',
             'tipo',
             'tipo_display',
+            'ativo',
             'nome',
             'responsavel',
             'responsavel_nome',
@@ -53,6 +54,7 @@ class ClienteSerializer(serializers.ModelSerializer):
             'processos_possiveis',
             'processos_possiveis_nomes',
             'observacoes',
+            'criado_em',
         ]
 
     def get_processos_possiveis_nomes(self, obj):
@@ -139,13 +141,17 @@ class ProcessoArquivoSerializer(serializers.ModelSerializer):
 
 class ProcessoListSerializer(serializers.ModelSerializer):
     """Serializer simplificado para listagem"""
+    cliente = serializers.IntegerField(source='cliente_id', read_only=True)
     cliente_nome = serializers.CharField(source='cliente.nome', read_only=True)
+    tipo = serializers.IntegerField(source='tipo_id', read_only=True)
     advogado_nome = serializers.CharField(source='advogado.get_full_name', read_only=True)
     tipo_nome = serializers.CharField(source='tipo.nome', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     
     class Meta:
         model = Processo
-        fields = ['id', 'numero', 'cliente_nome', 'advogado_nome', 
-                  'tipo_nome', 'status', 'status_display', 
+        fields = ['id', 'numero', 'cliente', 'cliente_nome',
+                  'tipo', 'tipo_nome', 'valor_causa', 'objeto', 'vara',
+                  'advogado_nome',
+                  'status', 'status_display',
                   'criado_em', 'atualizado_em']

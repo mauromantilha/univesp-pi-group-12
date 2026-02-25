@@ -56,6 +56,14 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        ativo = self.request.query_params.get('ativo')
+        if ativo is not None:
+            ativo_normalizado = str(ativo).strip().lower()
+            if ativo_normalizado in {'1', 'true', 't', 'sim', 'yes'}:
+                queryset = queryset.filter(ativo=True)
+            elif ativo_normalizado in {'0', 'false', 'f', 'nao', 'não', 'no'}:
+                queryset = queryset.filter(ativo=False)
+
         if self.request.user.is_administrador():
             return queryset
         return queryset.filter(
@@ -77,6 +85,16 @@ class ClienteViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Você não pode transferir responsável deste cliente.')
         responsavel_final = serializer.instance.responsavel or self.request.user
         serializer.save(responsavel=responsavel_final)
+
+    @action(detail=True, methods=['post'])
+    def inativar(self, request, pk=None):
+        cliente = self.get_object()
+        if not cliente.ativo:
+            return Response({'detail': 'Cliente já está inativo.'})
+        cliente.ativo = False
+        cliente.save(update_fields=['ativo'])
+        serializer = self.get_serializer(cliente)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['get', 'post'], url_path='arquivos')
     def arquivos(self, request, pk=None):
@@ -120,8 +138,19 @@ class ProcessoViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         if self.request.user.is_administrador():
-            return queryset
-        return queryset.filter(advogado=self.request.user)
+            queryset_base = queryset
+        else:
+            queryset_base = queryset.filter(advogado=self.request.user)
+
+        status_filtro = self.request.query_params.get('status')
+        if status_filtro:
+            queryset_base = queryset_base.filter(status=status_filtro)
+
+        cliente_id = self.request.query_params.get('cliente')
+        if cliente_id:
+            queryset_base = queryset_base.filter(cliente_id=cliente_id)
+
+        return queryset_base
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -155,6 +184,31 @@ class ProcessoViewSet(viewsets.ModelViewSet):
         if not self._cliente_disponivel_para_usuario(cliente):
             raise PermissionDenied('Cliente não disponível para seu perfil.')
         serializer.save(advogado=self.request.user)
+
+    def _alterar_status(self, processo, novo_status):
+        processo.status = novo_status
+        processo.save(update_fields=['status', 'atualizado_em'])
+
+    @action(detail=True, methods=['post'])
+    def inativar(self, request, pk=None):
+        processo = self.get_object()
+        self._alterar_status(processo, 'suspenso')
+        serializer = self.get_serializer(processo)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def concluir(self, request, pk=None):
+        processo = self.get_object()
+        self._alterar_status(processo, 'finalizado')
+        serializer = self.get_serializer(processo)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def arquivar(self, request, pk=None):
+        processo = self.get_object()
+        self._alterar_status(processo, 'arquivado')
+        serializer = self.get_serializer(processo)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['get'])
     def movimentacoes(self, request, pk=None):

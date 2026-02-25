@@ -132,3 +132,41 @@ class ProcessosApiPermissoesTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.cliente_compartilhado.refresh_from_db()
         self.assertEqual(self.cliente_compartilhado.responsavel_id, self.adv2.pk)
+
+    def test_inativar_cliente_disponivel_para_advogado(self):
+        self.client.force_authenticate(user=self.adv1)
+        response = self.client.post(reverse('cliente-inativar', args=[self.cliente_adv1.pk]))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.cliente_adv1.refresh_from_db()
+        self.assertFalse(self.cliente_adv1.ativo)
+
+    def test_alteracao_status_processo_por_acoes_dedicadas(self):
+        self.client.force_authenticate(user=self.adv1)
+
+        response_inativar = self.client.post(reverse('processo-inativar', args=[self.processo_adv1.pk]))
+        self.assertEqual(response_inativar.status_code, status.HTTP_200_OK)
+        self.processo_adv1.refresh_from_db()
+        self.assertEqual(self.processo_adv1.status, 'suspenso')
+
+        response_concluir = self.client.post(reverse('processo-concluir', args=[self.processo_adv1.pk]))
+        self.assertEqual(response_concluir.status_code, status.HTTP_200_OK)
+        self.processo_adv1.refresh_from_db()
+        self.assertEqual(self.processo_adv1.status, 'finalizado')
+
+        response_arquivar = self.client.post(reverse('processo-arquivar', args=[self.processo_adv1.pk]))
+        self.assertEqual(response_arquivar.status_code, status.HTTP_200_OK)
+        self.processo_adv1.refresh_from_db()
+        self.assertEqual(self.processo_adv1.status, 'arquivado')
+
+    def test_listagem_processos_com_filtro_cliente_e_status(self):
+        self.client.force_authenticate(user=self.adv1)
+        self.client.post(reverse('processo-inativar', args=[self.processo_compartilhado.pk]))
+
+        response = self.client.get(
+            reverse('processo-list'),
+            {'cliente': self.cliente_compartilhado.pk, 'status': 'suspenso'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        resultados = response.data['results']
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0]['id'], self.processo_compartilhado.pk)
