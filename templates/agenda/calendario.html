@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Calendário – CRM Advocacia{% endblock %}
+{% block page_title %}Agenda e Prazos{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-end mb-3">
+  <a href="{% url 'novo_compromisso' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus me-1"></i> Novo Compromisso</a>
+</div>
+
+{% if atrasados %}
+<div class="alert alert-danger">
+  <strong><i class="bi bi-exclamation-triangle-fill me-1"></i> Atenção:</strong>
+  Há {{ atrasados.count }} compromisso(s) pendente(s) com data passada.
+</div>
+{% endif %}
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header"><strong>Próximos Compromissos</strong></div>
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr><th>Data</th><th>Tipo</th><th>Título</th><th>Processo</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for c in proximos %}
+            <tr>
+              <td>
+                {{ c.data|date:"d/m/Y" }}
+                {% if c.hora %}<small class="text-muted">{{ c.hora|time:"H:i" }}</small>{% endif %}
+              </td>
+              <td>
+                <span class="badge {% if c.tipo == 'prazo' %}bg-danger{% elif c.tipo == 'audiencia' %}bg-primary{% elif c.tipo == 'reuniao' %}bg-success{% else %}bg-secondary{% endif %}">
+                  {{ c.get_tipo_display }}
+                </span>
+              </td>
+              <td>{{ c.titulo }}</td>
+              <td>{% if c.processo %}<a href="{% url 'detalhe_processo' c.processo.pk %}">{{ c.processo.numero }}</a>{% else %}–{% endif %}</td>
+              <td>
+                <span class="badge {% if c.status == 'pendente' %}bg-warning text-dark{% elif c.status == 'concluido' %}bg-success{% else %}bg-secondary{% endif %}">
+                  {{ c.get_status_display }}
+                </span>
+              </td>
+              <td>
+                <a href="{% url 'editar_compromisso' c.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+                <form method="post" action="{% url 'excluir_compromisso' c.pk %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Excluir?')"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-3">Nenhum compromisso próximo.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card border-danger">
+      <div class="card-header bg-danger text-white">
+        <i class="bi bi-exclamation-triangle me-1"></i> Prazos Fatais Pendentes
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for p in prazos %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <strong>{{ p.titulo }}</strong><br>
+            <small class="text-muted">{% if p.processo %}{{ p.processo.numero }}{% endif %}</small>
+          </div>
+          <span class="badge {% if p.data < hoje %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+            {{ p.data|date:"d/m/Y" }}
+          </span>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-center text-muted">Nenhum prazo fatal.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

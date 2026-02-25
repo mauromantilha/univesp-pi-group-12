@@ -1,41 +1,66 @@
 from rest_framework import serializers
-from django.contrib.auth.password_validation import validate_password
-from .models import Usuario
+from .models import Usuario, UsuarioAtividadeLog
 
 
 class UsuarioSerializer(serializers.ModelSerializer):
-    nome_completo = serializers.ReadOnlyField()
-
+    papel_display = serializers.CharField(source='get_papel_display', read_only=True)
+    
     class Meta:
         model = Usuario
-        fields = ['id', 'username', 'email', 'first_name', 'last_name',
-                  'nome_completo', 'papel', 'oab', 'telefone', 'foto', 'bio', 'is_active']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 
+                  'papel', 'papel_display', 'foto', 'telefone', 'is_active']
         read_only_fields = ['id']
 
 
-class RegistroSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, validators=[validate_password])
-    password2 = serializers.CharField(write_only=True)
-
+class UsuarioSelfUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
-        fields = ['username', 'email', 'first_name', 'last_name',
-                  'papel', 'oab', 'telefone', 'password', 'password2']
+        fields = ['first_name', 'last_name', 'email', 'telefone', 'foto']
 
-    def validate(self, attrs):
-        if attrs['password'] != attrs['password2']:
-            raise serializers.ValidationError({'password': 'As senhas não coincidem.'})
-        return attrs
 
+class UsuarioCreateSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=True)
+    
+    class Meta:
+        model = Usuario
+        fields = ['username', 'email', 'password', 'first_name', 'last_name', 
+                  'papel', 'telefone']
+    
     def create(self, validated_data):
-        validated_data.pop('password2')
         user = Usuario.objects.create_user(**validated_data)
         return user
 
 
-class DashboardSerializer(serializers.Serializer):
-    usuario = UsuarioSerializer()
-    total_processos = serializers.IntegerField()
-    processos_em_andamento = serializers.IntegerField()
-    eventos_hoje = serializers.IntegerField()
-    prazos_proximos = serializers.IntegerField()
+class UsuarioAtividadeLogSerializer(serializers.ModelSerializer):
+    acao_display = serializers.CharField(source='get_acao_display', read_only=True)
+    autor_nome = serializers.SerializerMethodField()
+    usuario_nome = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UsuarioAtividadeLog
+        fields = [
+            'id',
+            'acao',
+            'acao_display',
+            'detalhes',
+            'rota',
+            'ip_endereco',
+            'dados_extra',
+            'criado_em',
+            'autor',
+            'autor_nome',
+            'usuario',
+            'usuario_nome',
+        ]
+
+    def _nome_usuario(self, obj):
+        if obj is None:
+            return None
+        nome = obj.get_full_name()
+        return nome or obj.username
+
+    def get_autor_nome(self, obj):
+        return self._nome_usuario(obj.autor)
+
+    def get_usuario_nome(self, obj):
+        return self._nome_usuario(obj.usuario)

@@ -1,18 +1,15 @@
 from rest_framework import serializers
-from .models import Evento
+from .models import Compromisso
 
 
-class EventoSerializer(serializers.ModelSerializer):
-    responsavel_nome = serializers.StringRelatedField(source='responsavel')
-    processo_numero  = serializers.StringRelatedField(source='processo')
-    tipo_processo_nome = serializers.SerializerMethodField()
-
+class CompromissoSerializer(serializers.ModelSerializer):
+    advogado_nome = serializers.CharField(source='advogado.get_full_name', read_only=True)
+    processo_numero = serializers.CharField(source='processo.numero', read_only=True, allow_null=True)
+    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
     class Meta:
-        model = Evento
-        fields = '__all__'
-        read_only_fields = ['criado_em']
-
-    def get_tipo_processo_nome(self, obj):
-        if obj.processo and hasattr(obj.processo, 'tipo_processo') and obj.processo.tipo_processo:
-            return obj.processo.tipo_processo.nome
-        return None
+        model = Compromisso
+        fields = ['id', 'titulo', 'tipo', 'tipo_display', 'data', 'hora',
+                  'advogado', 'advogado_nome', 'processo', 'processo_numero',
+                  'descricao', 'status', 'status_display', 'criado_em']

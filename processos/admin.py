@@ -1,33 +1,41 @@
 from django.contrib import admin
-from .models import Cliente, Vara, TipoProcesso, Processo, Movimentacao
+from .models import Cliente, Processo, ProcessoArquivo, ClienteArquivo, Movimentacao, Comarca, Vara, TipoProcesso
+
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'cpf_cnpj', 'email', 'telefone', 'criado_em')
-    search_fields = ('nome', 'cpf_cnpj', 'email')
-    list_filter = ('criado_em',)
+    list_display = ('nome', 'tipo', 'responsavel', 'cpf_cnpj', 'email', 'telefone')
+    search_fields = ('nome', 'cpf_cnpj', 'email', 'demanda')
+    list_filter = ('tipo', 'responsavel')
 
-@admin.register(Vara)
-class VaraAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'comarca', 'tribunal')
-    search_fields = ('nome', 'comarca', 'tribunal')
-
-@admin.register(TipoProcesso)
-class TipoProcessoAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'descricao')
-    search_fields = ('nome',)
 
 @admin.register(Processo)
 class ProcessoAdmin(admin.ModelAdmin):
-    list_display = ('numero', 'cliente', 'advogado_responsavel', 'status', 'tipo', 'criado_em')
-    list_filter = ('status', 'polo_cliente', 'tipo')
-    search_fields = ('numero', 'cliente__nome', 'advogado_responsavel__username')
-    raw_id_fields = ('cliente', 'advogado_responsavel', 'vara')
-    date_hierarchy = 'criado_em'
+    list_display = ('numero', 'cliente', 'advogado', 'tipo', 'vara', 'status', 'criado_em')
+    list_filter = ('status', 'tipo', 'advogado')
+    search_fields = ('numero', 'cliente__nome')
+
 
 @admin.register(Movimentacao)
 class MovimentacaoAdmin(admin.ModelAdmin):
-    list_display = ('processo', 'tipo', 'data', 'usuario')
-    list_filter = ('tipo', 'data')
-    search_fields = ('processo__numero', 'descricao')
-    raw_id_fields = ('processo', 'usuario')
+    list_display = ('processo', 'data', 'titulo', 'autor')
+    list_filter = ('data',)
+
+
+@admin.register(ProcessoArquivo)
+class ProcessoArquivoAdmin(admin.ModelAdmin):
+    list_display = ('nome_original', 'processo', 'enviado_por', 'criado_em')
+    list_filter = ('criado_em',)
+    search_fields = ('nome_original', 'processo__numero')
+
+
+@admin.register(ClienteArquivo)
+class ClienteArquivoAdmin(admin.ModelAdmin):
+    list_display = ('nome_original', 'cliente', 'enviado_por', 'criado_em')
+    list_filter = ('criado_em',)
+    search_fields = ('nome_original', 'cliente__nome')
+
+
+admin.site.register(Comarca)
+admin.site.register(Vara)
+admin.site.register(TipoProcesso)

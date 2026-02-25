@@ -1,38 +1,46 @@
 from django.db import models
 from django.conf import settings
-from processos.models import TipoProcesso, Vara
 
 
 class Documento(models.Model):
-    TIPO_CHOICES = [
+    CATEGORIA_CHOICES = [
         ('sentenca', 'Sentença'),
         ('acordao', 'Acórdão'),
-        ('peticao', 'Petição'),
         ('decisao', 'Decisão Interlocutória'),
         ('tese', 'Tese Jurídica'),
+        ('jurisprudencia', 'Jurisprudência Externa'),
         ('outro', 'Outro'),
     ]
-    titulo = models.CharField(max_length=300)
-    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default='sentenca')
-    tipo_processo = models.ForeignKey(TipoProcesso, on_delete=models.SET_NULL, null=True, blank=True)
-    vara = models.ForeignKey(Vara, on_delete=models.SET_NULL, null=True, blank=True)
-    juiz = models.CharField(max_length=200, blank=True, null=True)
-    numero_processo = models.CharField(max_length=50, blank=True, null=True)
-    data_decisao = models.DateField(null=True, blank=True)
-    resultado = models.CharField(max_length=50, blank=True, null=True, help_text='Ex: procedente, improcedente')
-    valor_causa = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
-    resumo = models.TextField(blank=True, null=True)
-    conteudo = models.TextField(help_text='Texto completo do documento para busca')
-    arquivo = models.FileField(upload_to='jurisprudencia/', blank=True, null=True)
-    tags = models.CharField(max_length=500, blank=True, null=True, help_text='Tags separadas por vírgula')
-    adicionado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    titulo = models.CharField(max_length=300, verbose_name='Título')
+    categoria = models.CharField(max_length=20, choices=CATEGORIA_CHOICES, default='outro', verbose_name='Categoria')
+    tribunal = models.CharField(max_length=100, blank=True, verbose_name='Tribunal / Órgão')
+    processo_referencia = models.ForeignKey(
+        'processos.Processo',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='documentos_juridicos',
+        verbose_name='Processo Vinculado',
+    )
+    conteudo = models.TextField(verbose_name='Conteúdo / Ementa')
+    arquivo = models.FileField(upload_to='jurisprudencia/', blank=True, null=True, verbose_name='Arquivo (PDF)')
+    tags = models.CharField(max_length=300, blank=True, verbose_name='Tags (separadas por vírgula)')
+    adicionado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        verbose_name='Adicionado por',
+    )
+    data_decisao = models.DateField(null=True, blank=True, verbose_name='Data da Decisão')
     criado_em = models.DateTimeField(auto_now_add=True)
-    atualizado_em = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = 'Documento Jurídico'
-        verbose_name_plural = 'Documentos Jurídicos'
-        ordering = ['-data_decisao']
+        verbose_name = 'Documento'
+        verbose_name_plural = 'Documentos'
+        ordering = ['-criado_em']
 
     def __str__(self):
-        return f'{self.titulo} ({self.get_tipo_display()})'
+        return self.titulo
+
+    def get_tags_list(self):
+        return [t.strip() for t in self.tags.split(',') if t.strip()]

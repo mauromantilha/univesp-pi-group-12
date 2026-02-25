@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – CRM Advocacia{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card text-bg-primary">
+      <div class="card-body d-flex align-items-center gap-3">
+        <i class="bi bi-folder2-open" style="font-size:2rem"></i>
+        <div>
+          <div class="fs-2 fw-bold">{{ processos_ativos }}</div>
+          <div>Processos Cadastrados</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-bg-success">
+      <div class="card-body d-flex align-items-center gap-3">
+        <i class="bi bi-people-fill" style="font-size:2rem"></i>
+        <div>
+          <div class="fs-2 fw-bold">{{ total_clientes }}</div>
+          <div>Total de Clientes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-bg-success">
+      <div class="card-body d-flex align-items-center gap-3">
+        <i class="bi bi-calendar-check" style="font-size:2rem"></i>
+        <div>
+          <div class="fs-2 fw-bold">{{ eventos_hoje }}</div>
+          <div>Eventos Hoje</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-bg-danger">
+      <div class="card-body d-flex align-items-center gap-3">
+        <i class="bi bi-exclamation-triangle" style="font-size:2rem"></i>
+        <div>
+          <div class="fs-2 fw-bold">{{ prazos_proximos }}</div>
+          <div>Prazos Próximos (7 dias)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Processos Recentes</strong>
+        <a href="{% url 'lista_processos' %}" class="btn btn-sm btn-outline-primary">Ver todos</a>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Número</th>
+              <th>Cliente</th>
+              <th>Tipo</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+        {% for p in processos_recentes %}
+        <tr>
+              <td><a href="{% url 'detalhe_processo' p.pk %}">{{ p.numero }}</a></td>
+              <td>{{ p.cliente }}</td>
+              <td>{{ p.tipo }}</td>
+              <td>
+                <span class="badge {% if p.status == 'em_andamento' %}bg-primary{% elif p.status == 'suspenso' %}bg-warning text-dark{% elif p.status == 'finalizado' %}bg-success{% else %}bg-secondary{% endif %}">
+                  {{ p.get_status_display }}
+                </span>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center text-muted py-3">Nenhum processo encontrado.</td></tr>
+        {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Eventos e Prazos Próximos</strong>
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for ev in eventos_prazos_proximos %}
+        <li class="list-group-item">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="small text-muted">
+              {{ ev.data|date:"d/m/Y" }}{% if ev.hora %} {{ ev.hora|time:"H:i" }}{% endif %}
+            </span>
+            <span class="badge bg-{% if ev.tipo == 'prazo' %}danger{% else %}secondary{% endif %}">
+              {{ ev.get_tipo_display }}
+            </span>
+          </div>
+          <div class="fw-semibold small">{{ ev.titulo }}</div>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-center text-muted py-3">
+          Nenhum evento ou prazo pendente.
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="card-footer bg-white border-0">
+        <a href="{% url 'calendario' %}" class="btn btn-sm btn-outline-primary w-100">Ver Agenda Completa</a>
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Acesso Rápido</strong>
+      </div>
+      <div class="list-group list-group-flush">
+        <a href="{% url 'novo_processo' %}" class="list-group-item list-group-item-action">
+          <i class="bi bi-plus-circle me-2 text-primary"></i> Novo Processo
+        </a>
+        <a href="{% url 'novo_cliente' %}" class="list-group-item list-group-item-action">
+          <i class="bi bi-person-plus me-2 text-success"></i> Novo Cliente
+        </a>
+        <a href="{% url 'novo_compromisso' %}" class="list-group-item list-group-item-action">
+          <i class="bi bi-calendar-plus me-2 text-warning"></i> Novo Compromisso
+        </a>
+        <a href="{% url 'novo_documento' %}" class="list-group-item list-group-item-action">
+          <i class="bi bi-file-earmark-plus me-2 text-info"></i> Adicionar Jurisprudência
+        </a>
+        <a href="{% url 'alertas' %}" class="list-group-item list-group-item-action">
+          <i class="bi bi-bell me-2 text-danger"></i> Ver Alertas de Prazo
+        </a>
+        {% if user.is_administrador %}
+        <a href="{% url 'gestao_usuarios' %}" class="list-group-item list-group-item-action">
+          <i class="bi bi-person-gear me-2 text-dark"></i> Gestão Usuários
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

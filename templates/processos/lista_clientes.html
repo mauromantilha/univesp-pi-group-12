@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Clientes – CRM Advocacia{% endblock %}
+{% block page_title %}Clientes{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <form class="d-flex gap-2" method="get">
+    <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="Buscar cliente…">
+    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
+  </form>
+  <a href="{% url 'novo_cliente' %}" class="btn btn-primary btn-sm"><i class="bi bi-person-plus me-1"></i> Novo Cliente</a>
+</div>
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr><th>Nome</th><th>Tipo</th><th>CPF/CNPJ</th><th>Telefone</th><th>E-mail</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for c in clientes %}
+        <tr>
+          <td><a href="{% url 'detalhe_cliente' c.pk %}">{{ c.nome }}</a></td>
+          <td>{{ c.get_tipo_display }}</td>
+          <td>{{ c.cpf_cnpj|default:"–" }}</td>
+          <td>{{ c.telefone|default:"–" }}</td>
+          <td>{{ c.email|default:"–" }}</td>
+          <td>
+            <a href="{% url 'editar_cliente' c.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-3">Nenhum cliente encontrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

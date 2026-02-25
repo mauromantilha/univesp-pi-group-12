@@ -1,167 +1,185 @@
-from rest_framework import viewsets, status, filters
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from django.db.models import Sum, Q
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.db.models import Q, Sum
+from django.http import JsonResponse
 from django.utils import timezone
-from datetime import date, timedelta
-from django_filters.rest_framework import DjangoFilterBackend
-
-from .models import ContaBancaria, PlanoContas, LancamentoFinanceiro
-from .serializers import (
-    ContaBancariaSerializer, PlanoContasSerializer, LancamentoFinanceiroSerializer
-)
+from accounts.permissions import usuario_pode_escrever
+from .models import Lancamento, LancamentoArquivo
+from .forms import LancamentoForm, LancamentoArquivoUploadForm
+from processos.models import Processo
 
 
-class ContaBancariaViewSet(viewsets.ModelViewSet):
-    queryset = ContaBancaria.objects.filter(ativo=True)
-    serializer_class = ContaBancariaSerializer
+def _lancamentos_usuario(usuario):
+    if usuario.is_administrador():
+        return Lancamento.objects.select_related('cliente', 'processo', 'criado_por')
+    return Lancamento.objects.select_related('cliente', 'processo', 'criado_por').filter(
+        Q(criado_por=usuario) | Q(processo__advogado=usuario)
+    ).distinct()
 
-    @action(detail=True, methods=["get"], url_path="extrato")
-    def extrato(self, request, pk=None):
-        conta = self.get_object()
-        lancamentos = LancamentoFinanceiro.objects.filter(
-            conta_bancaria=conta, status="pago"
-        ).select_related("cliente", "categoria", "processo").order_by("-data_pagamento")
-        serializer = LancamentoFinanceiroSerializer(
-            lancamentos, many=True, context={"request": request}
+
+def _somente_escrita_permitida(request):
+    if usuario_pode_escrever(request.user):
+        return None
+    messages.error(request, 'Somente advogados e administradores podem alterar dados.')
+    return redirect('lista_lancamentos')
+
+
+def _salvar_arquivos_lancamento(lancamento, arquivos, usuario):
+    for arquivo in arquivos:
+        LancamentoArquivo.objects.create(
+            lancamento=lancamento,
+            arquivo=arquivo,
+            nome_original=arquivo.name,
+            enviado_por=usuario,
         )
-        return Response({
-            "conta": ContaBancariaSerializer(conta).data,
-            "lancamentos": serializer.data,
-        })
 
 
-class PlanoContasViewSet(viewsets.ModelViewSet):
-    queryset = PlanoContas.objects.filter(ativo=True)
-    serializer_class = PlanoContasSerializer
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["tipo"]
+@login_required
+def lista_lancamentos(request):
+    qs = _lancamentos_usuario(request.user)
+
+    q = request.GET.get('q', '')
+    status_filtro = request.GET.get('status', '')
+    tipo_filtro = request.GET.get('tipo', '')
+
+    if q:
+        qs = qs.filter(
+            Q(descricao__icontains=q) |
+            Q(cliente__nome__icontains=q)
+        )
+    if status_filtro:
+        qs = qs.filter(status=status_filtro)
+    if tipo_filtro:
+        qs = qs.filter(tipo=tipo_filtro)
+
+    # Totalizadores
+    totais = qs.aggregate(
+        total_pendente=Sum('valor', filter=Q(status='pendente')),
+        total_pago=Sum('valor', filter=Q(status='pago')),
+        total_atrasado=Sum('valor', filter=Q(status='atrasado')),
+    )
+
+    # Marcar atrasados automaticamente
+    hoje = timezone.now().date()
+    ids_atrasados = list(qs.filter(status='pendente', data_vencimento__lt=hoje).values_list('id', flat=True))
+    if ids_atrasados:
+        Lancamento.objects.filter(id__in=ids_atrasados).update(status='atrasado')
+        qs = _lancamentos_usuario(request.user)
+
+    return render(request, 'financeiro/lista_lancamentos.html', {
+        'lancamentos': qs,
+        'q': q,
+        'status_filtro': status_filtro,
+        'tipo_filtro': tipo_filtro,
+        'status_choices': Lancamento.STATUS_CHOICES,
+        'tipo_choices': Lancamento.TIPO_CHOICES,
+        'totais': totais,
+    })
 
 
-class LancamentoFinanceiroViewSet(viewsets.ModelViewSet):
-    queryset = LancamentoFinanceiro.objects.select_related(
-        "cliente", "processo", "conta_bancaria", "categoria"
-    ).all()
-    serializer_class = LancamentoFinanceiroSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ["tipo", "status", "cliente", "processo", "conta_bancaria", "categoria"]
-    search_fields = ["descricao", "cliente__nome", "processo__numero"]
-    ordering_fields = ["data_vencimento", "valor", "criado_em"]
+@login_required
+def novo_lancamento(request):
+    bloqueio = _somente_escrita_permitida(request)
+    if bloqueio:
+        return bloqueio
+    form = LancamentoForm(request.POST or None, request.FILES or None)
+    if not request.user.is_administrador():
+        processos_usuario = Processo.objects.filter(advogado=request.user).select_related('cliente')
+        form.fields['processo'].queryset = processos_usuario
+        form.fields['cliente'].queryset = form.fields['cliente'].queryset.filter(processos__advogado=request.user).distinct()
+    if request.method == 'POST' and form.is_valid():
+        lancamento = form.save(commit=False)
+        if (
+            not request.user.is_administrador()
+            and lancamento.processo
+            and lancamento.processo.advogado_id != request.user.id
+        ):
+            messages.error(request, 'Processo inválido para o seu perfil.')
+            return render(request, 'financeiro/form_lancamento.html', {'form': form, 'titulo': 'Novo Lançamento'})
+        lancamento.criado_por = request.user
+        lancamento.save()
+        _salvar_arquivos_lancamento(
+            lancamento=lancamento,
+            arquivos=form.cleaned_data.get('arquivos', []),
+            usuario=request.user,
+        )
+        return redirect('lista_lancamentos')
+    return render(request, 'financeiro/form_lancamento.html', {'form': form, 'titulo': 'Novo Lançamento'})
 
-    def get_queryset(self):
-        qs = super().get_queryset()
-        # Auto-calculates atrasado status on the fly
-        hoje = date.today()
-        qs = qs.exclude(status__in=["pago", "cancelado"])
-        qs_atrasado = LancamentoFinanceiro.objects.filter(
-            data_vencimento__lt=hoje, status="pendente"
-        ).update(status="atrasado")
-        return super().get_queryset()
 
-    @action(detail=True, methods=["post"], url_path="baixar")
-    def baixar(self, request, pk=None):
-        lancamento = self.get_object()
-        data_pagamento = request.data.get("data_pagamento")
-        conta_id = request.data.get("conta_bancaria_id")
+@login_required
+def editar_lancamento(request, pk):
+    bloqueio = _somente_escrita_permitida(request)
+    if bloqueio:
+        return bloqueio
+    lancamento = get_object_or_404(_lancamentos_usuario(request.user), pk=pk)
+    form = LancamentoForm(request.POST or None, request.FILES or None, instance=lancamento)
+    if not request.user.is_administrador():
+        processos_usuario = Processo.objects.filter(advogado=request.user).select_related('cliente')
+        form.fields['processo'].queryset = processos_usuario
+        form.fields['cliente'].queryset = form.fields['cliente'].queryset.filter(processos__advogado=request.user).distinct()
+    if request.method == 'POST' and form.is_valid():
+        lancamento_editado = form.save(commit=False)
+        if (
+            not request.user.is_administrador()
+            and lancamento_editado.processo
+            and lancamento_editado.processo.advogado_id != request.user.id
+        ):
+            messages.error(request, 'Processo inválido para o seu perfil.')
+            return render(request, 'financeiro/form_lancamento.html', {'form': form, 'titulo': 'Editar Lançamento', 'lancamento': lancamento})
+        lancamento_editado.save()
+        _salvar_arquivos_lancamento(
+            lancamento=lancamento_editado,
+            arquivos=form.cleaned_data.get('arquivos', []),
+            usuario=request.user,
+        )
+        return redirect('detalhe_lancamento', pk=lancamento.pk)
+    return render(request, 'financeiro/form_lancamento.html', {'form': form, 'titulo': 'Editar Lançamento', 'lancamento': lancamento})
 
-        if not data_pagamento:
-            return Response(
-                {"erro": "data_pagamento e obrigatoria"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
 
-        conta = None
-        if conta_id:
-            try:
-                conta = ContaBancaria.objects.get(pk=conta_id)
-            except ContaBancaria.DoesNotExist:
-                return Response(
-                    {"erro": "Conta bancaria nao encontrada"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
+@login_required
+def detalhe_lancamento(request, pk):
+    lancamento = get_object_or_404(_lancamentos_usuario(request.user), pk=pk)
+    arquivos = lancamento.arquivos.select_related('enviado_por').all()
+    form_arquivos = LancamentoArquivoUploadForm()
+    return render(request, 'financeiro/detalhe_lancamento.html', {
+        'lancamento': lancamento,
+        'arquivos': arquivos,
+        'form_arquivos': form_arquivos,
+    })
 
-        try:
-            lancamento.baixar(data_pagamento, conta_bancaria=conta)
-        except ValueError as e:
-            return Response({"erro": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = self.get_serializer(lancamento)
-        return Response(serializer.data)
+@login_required
+def api_cliente_do_processo(request, processo_pk):
+    """Retorna JSON com o ID e nome do cliente de um processo (usado via JS no formulário)."""
+    processos_qs = Processo.objects.select_related('cliente')
+    if not request.user.is_administrador():
+        processos_qs = processos_qs.filter(advogado=request.user)
+    processo = get_object_or_404(processos_qs, pk=processo_pk)
+    return JsonResponse({'cliente_id': processo.cliente.pk, 'cliente_nome': processo.cliente.nome})
 
-    @action(detail=False, methods=["get"], url_path="dashboard")
-    def dashboard(self, request):
-        hoje = date.today()
-        inicio_mes = hoje.replace(day=1)
-        proximo_mes = (inicio_mes + timedelta(days=32)).replace(day=1)
 
-        # Atualiza atrasados
-        LancamentoFinanceiro.objects.filter(
-            data_vencimento__lt=hoje, status="pendente"
-        ).update(status="atrasado")
+@login_required
+def upload_arquivos_lancamento(request, pk):
+    bloqueio = _somente_escrita_permitida(request)
+    if bloqueio:
+        return bloqueio
 
-        receitas_mes = LancamentoFinanceiro.objects.filter(
-            tipo="receber", status="pago",
-            data_pagamento__gte=inicio_mes, data_pagamento__lt=proximo_mes
-        ).aggregate(total=Sum("valor"))["total"] or 0
+    lancamento = get_object_or_404(_lancamentos_usuario(request.user), pk=pk)
+    if request.method != 'POST':
+        return redirect('detalhe_lancamento', pk=pk)
 
-        despesas_mes = LancamentoFinanceiro.objects.filter(
-            tipo="pagar", status="pago",
-            data_pagamento__gte=inicio_mes, data_pagamento__lt=proximo_mes
-        ).aggregate(total=Sum("valor"))["total"] or 0
+    form = LancamentoArquivoUploadForm(request.POST, request.FILES)
+    if form.is_valid():
+        arquivos = form.cleaned_data.get('arquivos', [])
+        _salvar_arquivos_lancamento(
+            lancamento=lancamento,
+            arquivos=arquivos,
+            usuario=request.user,
+        )
+        messages.success(request, f'{len(arquivos)} arquivo(s) enviado(s) com sucesso.')
+    else:
+        messages.error(request, 'Selecione ao menos um arquivo válido para upload.')
 
-        a_receber = LancamentoFinanceiro.objects.filter(
-            tipo="receber",
-            data_vencimento__gte=inicio_mes,
-            data_vencimento__lt=proximo_mes,
-            status__in=["pendente", "atrasado"]
-        ).aggregate(total=Sum("valor"))["total"] or 0
-
-        a_pagar = LancamentoFinanceiro.objects.filter(
-            tipo="pagar",
-            data_vencimento__gte=inicio_mes,
-            data_vencimento__lt=proximo_mes,
-            status__in=["pendente", "atrasado"]
-        ).aggregate(total=Sum("valor"))["total"] or 0
-
-        atrasados_count = LancamentoFinanceiro.objects.filter(
-            status="atrasado"
-        ).count()
-
-        atrasados_valor = LancamentoFinanceiro.objects.filter(
-            status="atrasado"
-        ).aggregate(total=Sum("valor"))["total"] or 0
-
-        saldo_total = ContaBancaria.objects.filter(
-            ativo=True
-        ).aggregate(total=Sum("saldo_atual"))["total"] or 0
-
-        # Grafico 6 meses
-        grafico = []
-        for i in range(5, -1, -1):
-            mes_ref = hoje.replace(day=1) - timedelta(days=i * 28)
-            mes_ref = mes_ref.replace(day=1)
-            prox = (mes_ref + timedelta(days=32)).replace(day=1)
-            rec = LancamentoFinanceiro.objects.filter(
-                tipo="receber", status="pago",
-                data_pagamento__gte=mes_ref, data_pagamento__lt=prox
-            ).aggregate(total=Sum("valor"))["total"] or 0
-            desp = LancamentoFinanceiro.objects.filter(
-                tipo="pagar", status="pago",
-                data_pagamento__gte=mes_ref, data_pagamento__lt=prox
-            ).aggregate(total=Sum("valor"))["total"] or 0
-            grafico.append({
-                "mes": mes_ref.strftime("%b/%Y"),
-                "receitas": float(rec),
-                "despesas": float(desp),
-            })
-
-        return Response({
-            "receitas_mes": float(receitas_mes),
-            "despesas_mes": float(despesas_mes),
-            "a_receber_mes": float(a_receber),
-            "a_pagar_mes": float(a_pagar),
-            "atrasados_count": atrasados_count,
-            "atrasados_valor": float(atrasados_valor),
-            "saldo_total": float(saldo_total),
-            "grafico_6_meses": grafico,
-        })
+    return redirect('detalhe_lancamento', pk=pk)

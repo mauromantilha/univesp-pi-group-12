@@ -1,0 +1,161 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}CRM Advocacia{% endblock %}</title>
+  <link href="{% static 'css/bootstrap.min.css' %}" rel="stylesheet">
+  <link href="{% static 'css/bootstrap-icons.min.css' %}" rel="stylesheet">
+  <style>
+    body { background-color: #f8f9fa; }
+    .sidebar { min-height: 100vh; background: #1a2e4a; }
+    .sidebar .nav-link { color: #c8d4e3; padding: .6rem 1.2rem; border-radius: 6px; }
+    .sidebar .nav-link:hover, .sidebar .nav-link.active { background: #243d5e; color: #fff; }
+    .sidebar .nav-link i { width: 20px; }
+    .sidebar-brand { color: #fff; font-size: 1.1rem; font-weight: 700; padding: 1.2rem; border-bottom: 1px solid #243d5e; }
+    .sidebar-section { color: #6c8cb5; font-size: .7rem; text-transform: uppercase; letter-spacing: 1px; padding: .8rem 1.2rem .3rem; }
+    .topbar { background: #fff; border-bottom: 1px solid #dee2e6; }
+    .card { border: none; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    .badge-papel-administrador { background-color: #dc3545; }
+    .badge-papel-advogado { background-color: #0d6efd; }
+    .badge-papel-estagiario { background-color: #6c757d; }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+<div class="d-flex">
+  <!-- Sidebar -->
+  <nav class="sidebar d-flex flex-column p-0" style="width:240px;min-width:240px">
+    <div class="sidebar-brand">
+      <i class="bi bi-briefcase-fill me-2"></i> CRM Advocacia
+    </div>
+    <ul class="nav flex-column px-2 mt-2 flex-grow-1">
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">
+          <i class="bi bi-speedometer2 me-2"></i> Dashboard
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if '/accounts/portal/' in request.path %}active{% endif %}" href="{% url 'meu_portal' %}">
+          <i class="bi bi-person-workspace me-2"></i> Meu Portal
+        </a>
+      </li>
+
+      <div class="sidebar-section">Processos</div>
+      <li class="nav-item">
+        <a class="nav-link {% if 'processos' in request.path and 'clientes' not in request.path and 'carga' not in request.path and 'comarca' not in request.path and 'vara' not in request.path and 'tipo' not in request.path %}active{% endif %}" href="{% url 'lista_processos' %}">
+          <i class="bi bi-folder2-open me-2"></i> Processos
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if 'clientes' in request.path %}active{% endif %}" href="{% url 'lista_clientes' %}">
+          <i class="bi bi-people me-2"></i> Clientes
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if 'carga-trabalho' in request.path %}active{% endif %}" href="{% url 'carga_trabalho' %}">
+          <i class="bi bi-bar-chart me-2"></i> Carga de Trabalho
+        </a>
+      </li>
+
+      <div class="sidebar-section">Agenda</div>
+      <li class="nav-item">
+        <a class="nav-link {% if '/agenda/' in request.path and 'alertas' not in request.path %}active{% endif %}" href="{% url 'calendario' %}">
+          <i class="bi bi-calendar3 me-2"></i> Calendário
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if 'alertas' in request.path %}active{% endif %}" href="{% url 'alertas' %}">
+          <i class="bi bi-bell me-2"></i> Alertas de Prazo
+        </a>
+      </li>
+
+      <div class="sidebar-section">Jurisprudência</div>
+      <li class="nav-item">
+        <a class="nav-link {% if '/jurisprudencia/' in request.path %}active{% endif %}" href="{% url 'lista_documentos' %}">
+          <i class="bi bi-journal-text me-2"></i> Repositório
+        </a>
+      </li>
+
+      <div class="sidebar-section">Financeiro</div>
+      <li class="nav-item">
+        <a class="nav-link {% if '/financeiro/' in request.path %}active{% endif %}" href="{% url 'lista_lancamentos' %}">
+          <i class="bi bi-cash-stack me-2"></i> Lançamentos
+        </a>
+      </li>
+
+      <div class="sidebar-section">IA Preditiva</div>
+      <li class="nav-item">
+        <a class="nav-link {% if 'sugestoes' in request.path %}active{% endif %}" href="{% url 'sugestoes_jurisprudencia' %}">
+          <i class="bi bi-lightbulb me-2"></i> Sugestões IA
+        </a>
+      </li>
+
+      {% if user.is_administrador %}
+      <div class="sidebar-section">Administração</div>
+      <li class="nav-item">
+        <a class="nav-link {% if 'usuarios' in request.path or 'gestao-usuarios' in request.path %}active{% endif %}" href="{% url 'gestao_usuarios' %}">
+          <i class="bi bi-person-gear me-2"></i> Gestão Usuários
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{% url 'gestao_usuarios' %}#usuarios-ativos">
+          <i class="bi bi-person-check me-2"></i> Usuários Ativos
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{% url 'gestao_usuarios' %}#gerenciar-usuarios">
+          <i class="bi bi-people me-2"></i> Gerenciar Usuários
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{% url 'gestao_usuarios' %}#auditoria-logs">
+          <i class="bi bi-journal-text me-2"></i> Atividades e Logs
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{% url 'lista_comarcas' %}">
+          <i class="bi bi-geo-alt me-2"></i> Comarcas/Varas
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{% url 'lista_tipos' %}">
+          <i class="bi bi-tags me-2"></i> Tipos de Processo
+        </a>
+      </li>
+      {% endif %}
+    </ul>
+    <div class="px-3 py-3 border-top border-secondary">
+      <small class="text-muted d-block mb-1">{{ user.get_full_name|default:user.username }}</small>
+      <a href="{% url 'perfil' %}" class="btn btn-sm btn-outline-secondary me-1"><i class="bi bi-person"></i></a>
+      <a href="{% url 'logout' %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-box-arrow-right"></i></a>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <div class="flex-grow-1 d-flex flex-column" style="min-width:0">
+    <div class="topbar px-4 py-2 d-flex align-items-center">
+      <h6 class="mb-0 text-muted">{% block page_title %}{% endblock %}</h6>
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <span class="badge bg-{% if user.papel == 'administrador' %}danger{% elif user.papel == 'advogado' %}primary{% else %}secondary{% endif %}">{{ user.get_papel_display }}</span>
+        <span class="text-muted small">{{ user.get_full_name|default:user.username }}</span>
+      </div>
+    </div>
+    <div class="flex-grow-1 p-4">
+      {% if messages %}
+        {% for msg in messages %}
+          <div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} alert-dismissible fade show" role="alert">
+            {{ msg }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+<script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

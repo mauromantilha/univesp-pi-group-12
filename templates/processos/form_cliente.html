@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} – CRM Advocacia{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:820px">
+  <div class="card-body">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+      <div class="alert alert-danger">{{ form.non_field_errors|join:" " }}</div>
+      {% endif %}
+
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.tipo.label }}</label>
+          {{ form.tipo }}
+          {% if form.tipo.errors %}<div class="text-danger small mt-1">{{ form.tipo.errors|join:" " }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.nome.label }}</label>
+          {{ form.nome }}
+          {% if form.nome.errors %}<div class="text-danger small mt-1">{{ form.nome.errors|join:" " }}</div>{% endif %}
+        </div>
+      </div>
+
+      {% if form.responsavel and not form.responsavel.is_hidden %}
+      <div class="mt-3">
+        <label class="form-label fw-semibold">{{ form.responsavel.label }}</label>
+        {{ form.responsavel }}
+        {% if form.responsavel.errors %}<div class="text-danger small mt-1">{{ form.responsavel.errors|join:" " }}</div>{% endif %}
+      </div>
+      {% elif form.responsavel %}
+      {{ form.responsavel }}
+      {% endif %}
+
+      <div class="row g-3 mt-1">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.cpf_cnpj.label }}</label>
+          {{ form.cpf_cnpj }}
+          {% if form.cpf_cnpj.errors %}<div class="text-danger small mt-1">{{ form.cpf_cnpj.errors|join:" " }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.telefone.label }}</label>
+          {{ form.telefone }}
+          {% if form.telefone.errors %}<div class="text-danger small mt-1">{{ form.telefone.errors|join:" " }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label fw-semibold">{{ form.email.label }}</label>
+        {{ form.email }}
+        {% if form.email.errors %}<div class="text-danger small mt-1">{{ form.email.errors|join:" " }}</div>{% endif %}
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label fw-semibold">{{ form.endereco.label }}</label>
+        {{ form.endereco }}
+        {% if form.endereco.errors %}<div class="text-danger small mt-1">{{ form.endereco.errors|join:" " }}</div>{% endif %}
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label fw-semibold">{{ form.demanda.label }}</label>
+        {{ form.demanda }}
+        {% if form.demanda.errors %}<div class="text-danger small mt-1">{{ form.demanda.errors|join:" " }}</div>{% endif %}
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label fw-semibold">{{ form.processos_possiveis.label }}</label>
+        <input id="busca-processos-possiveis" type="text" class="form-control mb-2" placeholder="Buscar processos possíveis por nome...">
+        {{ form.processos_possiveis }}
+        {% if form.processos_possiveis.help_text %}
+        <div class="form-text">{{ form.processos_possiveis.help_text }}</div>
+        {% endif %}
+        {% if form.processos_possiveis.errors %}<div class="text-danger small mt-1">{{ form.processos_possiveis.errors|join:" " }}</div>{% endif %}
+      </div>
+
+      <div class="alert alert-info mt-3 mb-0">
+        O upload de documentos foi centralizado na área <strong>Documentos</strong> da interface React.
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label fw-semibold">{{ form.observacoes.label }}</label>
+        {{ form.observacoes }}
+        {% if form.observacoes.errors %}<div class="text-danger small mt-1">{{ form.observacoes.errors|join:" " }}</div>{% endif %}
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i> Salvar</button>
+        <a href="{% url 'lista_clientes' %}" class="btn btn-outline-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  (function () {
+    const busca = document.getElementById('busca-processos-possiveis');
+    const select = document.getElementById('id_processos_possiveis');
+    if (!busca || !select) return;
+    busca.addEventListener('input', function () {
+      const termo = busca.value.toLowerCase().trim();
+      Array.from(select.options).forEach(function (option) {
+        const visivel = option.text.toLowerCase().includes(termo);
+        option.hidden = !visivel;
+      });
+    });
+  })();
+</script>
+{% endblock %}

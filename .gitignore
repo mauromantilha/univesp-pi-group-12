@@ -1,17 +1,44 @@
-venv/
+# Python
 __pycache__/
 *.py[cod]
-*.pyo
-.env
-*.sqlite3
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Django
 *.log
-media/
+db.sqlite3
+db.sqlite3-journal
 staticfiles/
+media/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
-*.egg-info/
-dist/
-build/
-.coverage
-htmlcov/
-node_modules/
-.env.production
+Thumbs.db
+
+# Environment
+.env
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env.production
+
+# Reports
+relatorio_*.txt
+
+# Runtime backups / certs
+backups/
+config/global-bundle.pem

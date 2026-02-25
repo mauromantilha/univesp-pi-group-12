@@ -1,14 +1,15 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from .views import RegistroView, UsuarioViewSet
-
-router = DefaultRouter()
-router.register(r'usuarios', UsuarioViewSet, basename='usuario')
+from django.urls import path
+from . import views
 
 urlpatterns = [
-    path('', include(router.urls)),
-    path('auth/registro/', RegistroView.as_view(), name='registro'),
-    path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('login/', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+    path('dashboard/', views.dashboard, name='accounts_dashboard'),
+    path('portal/', views.meu_portal, name='meu_portal'),
+    path('portal/<int:pk>/', views.portal_usuario, name='portal_usuario'),
+    path('perfil/', views.perfil, name='perfil'),
+    path('gestao-usuarios/', views.gestao_usuarios, name='gestao_usuarios'),
+    path('usuarios/', views.lista_usuarios, name='lista_usuarios'),
+    path('usuarios/novo/', views.novo_usuario, name='novo_usuario'),
+    path('usuarios/<int:pk>/editar/', views.editar_usuario, name='editar_usuario'),
 ]

@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} – Financeiro{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-body">
+        <form method="post" id="form-lancamento" enctype="multipart/form-data">
+          {% csrf_token %}
+          <div class="row g-3">
+
+            <!-- Processo (ao selecionar, auto-preenche cliente) -->
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">Processo <span class="text-muted fw-normal">(opcional – preenche o cliente automaticamente)</span></label>
+              {{ form.processo }}
+            </div>
+
+            <!-- Cliente -->
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">Cliente <span class="text-danger">*</span></label>
+              {{ form.cliente }}
+              {% if form.cliente.errors %}<div class="text-danger small">{{ form.cliente.errors }}</div>{% endif %}
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Tipo <span class="text-danger">*</span></label>
+              {{ form.tipo }}
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Status</label>
+              {{ form.status }}
+            </div>
+
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">Descrição <span class="text-danger">*</span></label>
+              {{ form.descricao }}
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Valor (R$) <span class="text-danger">*</span></label>
+              {{ form.valor }}
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Vencimento <span class="text-danger">*</span></label>
+              {{ form.data_vencimento }}
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Data de Pagamento</label>
+              {{ form.data_pagamento }}
+            </div>
+
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">Observações</label>
+              {{ form.observacoes }}
+            </div>
+
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">Anexos</label>
+              {{ form.arquivos }}
+              <div class="form-text">Você pode selecionar múltiplos arquivos.</div>
+              {% if form.arquivos.errors %}<div class="text-danger small">{{ form.arquivos.errors }}</div>{% endif %}
+            </div>
+
+          </div>
+
+          <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i> Salvar</button>
+            <a href="{% url 'lista_lancamentos' %}" class="btn btn-outline-secondary">Cancelar</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Quando o usuário seleciona um processo, busca o cliente correspondente e preenche o campo
+const processoSelect = document.getElementById('id_processo');
+const clienteSelect = document.getElementById('id_cliente');
+
+processoSelect.addEventListener('change', function () {
+  const processoId = this.value;
+  if (!processoId) return;
+
+  fetch(`/financeiro/api/processo/${processoId}/cliente/`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.cliente_id) {
+        clienteSelect.value = data.cliente_id;
+      }
+    })
+    .catch(() => {});
+});
+</script>
+{% endblock %}

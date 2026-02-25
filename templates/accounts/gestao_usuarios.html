@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Gestão Usuários – CRM Advocacia{% endblock %}
+{% block page_title %}Gestão Usuários{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h5 class="mb-0">Gestão Usuários</h5>
+    <small class="text-muted">Controle de usuários ativos, gerenciamento e auditoria de atividades.</small>
+  </div>
+  <a href="{% url 'novo_usuario' %}" class="btn btn-primary btn-sm">
+    <i class="bi bi-person-plus me-1"></i> Novo Usuário
+  </a>
+</div>
+
+<div class="row g-3 mb-3" id="usuarios-ativos">
+  <div class="col-md-4">
+    <div class="card text-bg-success">
+      <div class="card-body">
+        <div class="fs-3 fw-bold">{{ usuarios_ativos }}</div>
+        <div>Usuários Ativos</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card text-bg-secondary">
+      <div class="card-body">
+        <div class="fs-3 fw-bold">{{ usuarios_inativos }}</div>
+        <div>Usuários Inativos</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card text-bg-primary">
+      <div class="card-body">
+        <div class="fs-3 fw-bold">{{ advogados_ativos }}</div>
+        <div>Advogados Ativos</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3" id="gerenciar-usuarios">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Gerenciar Usuários</strong>
+    <small class="text-muted">{{ usuarios|length }} usuário(s)</small>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Nome</th>
+          <th>Usuário</th>
+          <th>Papel</th>
+          <th>E-mail</th>
+          <th>Status</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in usuarios %}
+        <tr>
+          <td>{{ u.get_full_name|default:"–" }}</td>
+          <td>{{ u.username }}</td>
+          <td>
+            <span class="badge bg-{% if u.papel == 'administrador' %}danger{% elif u.papel == 'advogado' %}primary{% else %}secondary{% endif %}">
+              {{ u.get_papel_display }}
+            </span>
+          </td>
+          <td>{{ u.email|default:"–" }}</td>
+          <td>
+            {% if u.is_active %}
+            <span class="badge bg-success">Ativo</span>
+            {% else %}
+            <span class="badge bg-secondary">Inativo</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <a href="{% url 'editar_usuario' u.pk %}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <a href="{% url 'portal_usuario' u.pk %}" class="btn btn-sm btn-outline-primary">
+              <i class="bi bi-box-arrow-up-right"></i>
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-3">Nenhum usuário cadastrado.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-5" id="mostrar-atividades">
+    <div class="card h-100">
+      <div class="card-header">
+        <strong>Mostrar Atividades</strong>
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for log in atividades_recentes %}
+        <li class="list-group-item">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="badge bg-dark">{{ log.get_acao_display }}</span>
+            <small class="text-muted">{{ log.criado_em|date:"d/m/Y H:i" }}</small>
+          </div>
+          <div class="small">
+            <strong>Autor:</strong> {{ log.autor.get_full_name|default:log.autor.username|default:"Sistema" }}
+          </div>
+          <div class="small">
+            <strong>Usuário:</strong> {{ log.usuario.get_full_name|default:log.usuario.username|default:"–" }}
+          </div>
+          {% if log.detalhes %}
+          <div class="small text-muted mt-1">{{ log.detalhes }}</div>
+          {% endif %}
+        </li>
+        {% empty %}
+        <li class="list-group-item text-muted text-center py-3">Sem atividades registradas.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="col-lg-7" id="auditoria-logs">
+    <div class="card h-100">
+      <div class="card-header">
+        <strong>Auditoria e Logs dos Usuários</strong>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Data/Hora</th>
+              <th>Ação</th>
+              <th>Autor</th>
+              <th>Usuário</th>
+              <th>IP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in auditoria_logs %}
+            <tr>
+              <td>{{ log.criado_em|date:"d/m/Y H:i" }}</td>
+              <td>{{ log.get_acao_display }}</td>
+              <td>{{ log.autor.username|default:"sistema" }}</td>
+              <td>{{ log.usuario.username|default:"–" }}</td>
+              <td>{{ log.ip_endereco|default:"–" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="text-center text-muted py-3">Sem logs de auditoria.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

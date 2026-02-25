@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Sugestões de Jurisprudência – CRM Advocacia{% endblock %}
+{% block page_title %}IA – Sugestões de Jurisprudência{% endblock %}
+{% block content %}
+<div class="card mb-3">
+  <div class="card-body">
+    <form class="d-flex gap-2" method="get">
+      <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Busque por tema, tese, tipo de processo…">
+      <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i> Buscar</button>
+    </form>
+  </div>
+</div>
+
+{% if q %}
+<h6 class="text-muted mb-3">Resultados para: <strong>{{ q }}</strong></h6>
+{% if sugestoes %}
+<div class="row g-3">
+  {% for doc in sugestoes %}
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <span class="badge bg-secondary mb-1">{{ doc.get_categoria_display }}</span>
+        <h6 class="card-title"><a href="{% url 'detalhe_documento' doc.pk %}">{{ doc.titulo }}</a></h6>
+        {% if doc.tribunal %}<small class="text-muted d-block mb-1"><i class="bi bi-building me-1"></i>{{ doc.tribunal }}</small>{% endif %}
+        <p class="card-text text-muted small">{{ doc.conteudo|truncatewords:30 }}</p>
+        {% for tag in doc.get_tags_list %}
+        <span class="badge bg-light text-dark border me-1">{{ tag }}</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-warning">Nenhuma jurisprudência encontrada para "{{ q }}". <a href="{% url 'novo_documento' %}">Adicionar novo documento.</a></div>
+{% endif %}
+{% else %}
+<div class="alert alert-info"><i class="bi bi-info-circle me-2"></i> Digite um termo para buscar no repositório de jurisprudência.</div>
+{% endif %}
+{% endblock %}

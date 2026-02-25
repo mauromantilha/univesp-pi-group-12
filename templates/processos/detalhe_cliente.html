@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ cliente.nome }} – CRM Advocacia{% endblock %}
+{% block page_title %}Cliente: {{ cliente.nome }}{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <strong>Dados do Cliente</strong>
+        <a href="{% url 'editar_cliente' cliente.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+      </div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-5">Tipo</dt>
+          <dd class="col-7">{{ cliente.get_tipo_display }}</dd>
+          <dt class="col-5">Responsável</dt>
+          <dd class="col-7">{{ cliente.responsavel.get_full_name|default:cliente.responsavel.username|default:"–" }}</dd>
+          <dt class="col-5">CPF/CNPJ</dt>
+          <dd class="col-7">{{ cliente.cpf_cnpj|default:"–" }}</dd>
+          <dt class="col-5">Telefone</dt>
+          <dd class="col-7">{{ cliente.telefone|default:"–" }}</dd>
+          <dt class="col-5">E-mail</dt>
+          <dd class="col-7">{{ cliente.email|default:"–" }}</dd>
+          <dt class="col-5">Endereço</dt>
+          <dd class="col-7">{{ cliente.endereco|default:"–" }}</dd>
+        </dl>
+        {% if cliente.demanda %}
+        <hr>
+        <div class="fw-semibold mb-1">Demanda do Cliente</div>
+        <small class="text-muted">{{ cliente.demanda }}</small>
+        {% endif %}
+        {% if cliente.processos_possiveis.exists %}
+        <hr>
+        <div class="fw-semibold mb-2">Processos Possíveis</div>
+        <div class="d-flex flex-wrap gap-1">
+          {% for tipo in cliente.processos_possiveis.all %}
+          <span class="badge bg-info text-dark">{{ tipo.nome }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if cliente.observacoes %}
+        <hr>
+        <small class="text-muted">{{ cliente.observacoes }}</small>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <strong>Histórico de Processos</strong>
+        <a href="{% url 'novo_processo' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr><th>Número</th><th>Tipo</th><th>Advogado</th><th>Status</th><th>Cadastrado</th></tr>
+          </thead>
+          <tbody>
+            {% for p in cliente.processos.all %}
+            <tr>
+              <td><a href="{% url 'detalhe_processo' p.pk %}">{{ p.numero }}</a></td>
+              <td>{{ p.tipo|default:"–" }}</td>
+              <td>{{ p.advogado.get_full_name|default:"–" }}</td>
+              <td>
+                <span class="badge {% if p.status == 'em_andamento' %}bg-primary{% elif p.status == 'finalizado' %}bg-success{% else %}bg-secondary{% endif %}">
+                  {{ p.get_status_display }}
+                </span>
+              </td>
+              <td><small>{{ p.criado_em|date:"d/m/Y" }}</small></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center text-muted py-3">Nenhum processo.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-header">
+        <strong>Documentos do Cliente</strong>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Arquivo</th>
+              <th>Enviado por</th>
+              <th>Data</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for arquivo in arquivos_cliente %}
+            <tr>
+              <td>
+                <a href="{{ arquivo.arquivo.url }}" target="_blank" rel="noopener">
+                  {{ arquivo.nome_original|default:arquivo.arquivo.name }}
+                </a>
+              </td>
+              <td>{{ arquivo.enviado_por.get_full_name|default:arquivo.enviado_por.username|default:"–" }}</td>
+              <td>{{ arquivo.criado_em|date:"d/m/Y H:i" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="3" class="text-center text-muted py-3">Nenhum documento anexado.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

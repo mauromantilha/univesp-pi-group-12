@@ -1,68 +1,282 @@
-from rest_framework import generics, viewsets, permissions, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from django.utils import timezone
-from .models import Usuario
-from .serializers import UsuarioSerializer, RegistroSerializer, DashboardSerializer
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.db.models import Q, Sum
+from datetime import timedelta
+from .activity import registrar_atividade
+from .models import Usuario, UsuarioAtividadeLog
+from .forms import LoginForm, UsuarioCreationForm, UsuarioChangeForm, PerfilForm
 
 
-class RegistroView(generics.CreateAPIView):
-    queryset = Usuario.objects.all()
-    serializer_class = RegistroSerializer
-    permission_classes = [permissions.AllowAny]
+def login_view(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+    form = LoginForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        user = authenticate(
+            request,
+            username=form.cleaned_data['username'],
+            password=form.cleaned_data['password'],
+        )
+        if user:
+            login(request, user)
+            registrar_atividade(
+                acao='login_web',
+                request=request,
+                usuario=user,
+                autor=user,
+                detalhes='Login realizado na interface web.',
+            )
+            next_url = request.GET.get('next', '')
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url,
+                allowed_hosts={request.get_host()},
+                require_https=request.is_secure(),
+            ):
+                return redirect(next_url)
+            return redirect('dashboard')
+        messages.error(request, 'Usuário ou senha inválidos.')
+    return render(request, 'accounts/login.html', {'form': form})
 
 
-class UsuarioViewSet(viewsets.ModelViewSet):
-    queryset = Usuario.objects.all()
-    serializer_class = UsuarioSerializer
+def logout_view(request):
+    if request.user.is_authenticated:
+        registrar_atividade(
+            acao='logout',
+            request=request,
+            usuario=request.user,
+            autor=request.user,
+            detalhes='Logout realizado na interface web.',
+        )
+    logout(request)
+    return redirect('login')
 
-    def get_permissions(self):
-        if self.action in ['create', 'destroy']:
-            return [permissions.IsAdminUser()]
-        return [permissions.IsAuthenticated()]
 
-    @action(detail=False, methods=['get'], url_path='me')
-    def me(self, request):
-        serializer = UsuarioSerializer(request.user)
-        return Response(serializer.data)
+@login_required
+def dashboard(request):
+    from processos.models import Processo, Cliente
+    from agenda.models import Compromisso
+    from django.utils import timezone
 
-    @action(detail=False, methods=['get'], url_path='dashboard')
-    def dashboard(self, request):
-        from processos.models import Processo
-        from agenda.models import Evento
-        hoje = timezone.now().date()
-        proximos_7 = timezone.now() + timezone.timedelta(days=7)
+    hoje = timezone.now().date()
+    limite = hoje + timedelta(days=7)
+    usuario = request.user
 
-        data = {
-            'usuario': request.user,
-            'total_processos': Processo.objects.filter(advogado_responsavel=request.user).count(),
-            'processos_em_andamento': Processo.objects.filter(
-                advogado_responsavel=request.user, status='em_andamento'
-            ).count(),
-            'eventos_hoje': Evento.objects.filter(
-                responsavel=request.user,
-                data_inicio__date=hoje
-            ).count(),
-            'prazos_proximos': Evento.objects.filter(
-                responsavel=request.user,
-                tipo='prazo',
-                data_inicio__lte=proximos_7,
-                concluido=False
-            ).count(),
-        }
-        serializer = DashboardSerializer(data)
-        return Response(serializer.data)
+    if usuario.is_administrador():
+        processos_qs = Processo.objects.select_related('cliente', 'advogado', 'tipo').all()
+        clientes_qs = Cliente.objects.all()
+        compromissos_qs = Compromisso.objects.select_related('advogado', 'processo').all()
+    else:
+        processos_qs = Processo.objects.select_related('cliente', 'advogado', 'tipo').filter(advogado=usuario)
+        clientes_qs = Cliente.objects.filter(processos__advogado=usuario).distinct()
+        compromissos_qs = Compromisso.objects.select_related('advogado', 'processo').filter(advogado=usuario)
 
-    @action(detail=False, methods=['get'], url_path='carga-trabalho')
-    def carga_trabalho(self, request):
-        from processos.models import Processo
-        from django.db.models import Count
-        dados = Usuario.objects.filter(
-            papel__in=['advogado', 'administrador']
-        ).annotate(
-            processos_ativos=Count('processos_responsavel', filter=Processo.objects.filter(
-                status='em_andamento'
-            ).values('advogado_responsavel'))
-        ).values('id', 'first_name', 'last_name', 'oab', 'processos_ativos')
-        return Response(list(dados))
+    total_processos = processos_qs.count()
+    total_clientes = clientes_qs.count()
+    eventos_hoje = compromissos_qs.filter(
+        data=hoje,
+        status='pendente',
+    ).exclude(tipo='prazo').count()
+    prazos_proximos = compromissos_qs.filter(
+        tipo='prazo',
+        status='pendente',
+        data__gte=hoje,
+        data__lte=limite,
+    ).count()
+
+    return render(request, 'accounts/dashboard.html', {
+        # O frontend mantém o card com o rótulo "Processos Ativos", mas o usuário
+        # solicitou explicitamente que traga o total de processos cadastrados.
+        'processos_ativos': total_processos,
+        'total_processos': total_processos,
+        'total_clientes': total_clientes,
+        'eventos_hoje': eventos_hoje,
+        'prazos_proximos': prazos_proximos,
+        # chaves legadas para compatibilidade com templates existentes
+        'compromissos_hoje': eventos_hoje,
+        'prazos_urgentes': prazos_proximos,
+        'processos_recentes': processos_qs.order_by('-criado_em')[:5],
+        'eventos_prazos_proximos': compromissos_qs.filter(
+            status='pendente',
+            data__gte=hoje,
+        ).order_by('data', 'hora')[:8],
+        'hoje': hoje,
+    })
+
+
+@login_required
+def lista_usuarios(request):
+    return gestao_usuarios(request)
+
+
+def _contexto_gestao_usuarios():
+    usuarios = Usuario.objects.all().order_by('first_name', 'username')
+    logs_qs = UsuarioAtividadeLog.objects.select_related('autor', 'usuario').all()
+    return {
+        'usuarios': usuarios,
+        'usuarios_ativos': usuarios.filter(is_active=True).count(),
+        'usuarios_inativos': usuarios.filter(is_active=False).count(),
+        'advogados_ativos': usuarios.filter(papel='advogado', is_active=True).count(),
+        'atividades_recentes': logs_qs[:12],
+        'auditoria_logs': logs_qs[:60],
+    }
+
+
+@login_required
+def gestao_usuarios(request):
+    if not request.user.is_administrador():
+        messages.error(request, 'Acesso negado.')
+        return redirect('dashboard')
+    registrar_atividade(
+        acao='gestao_usuarios',
+        request=request,
+        detalhes='Acesso à página de gestão de usuários.',
+    )
+    return render(request, 'accounts/gestao_usuarios.html', _contexto_gestao_usuarios())
+
+
+@login_required
+def novo_usuario(request):
+    if not request.user.is_administrador():
+        messages.error(request, 'Acesso negado.')
+        return redirect('dashboard')
+    form = UsuarioCreationForm(request.POST or None, request.FILES or None)
+    if request.method == 'POST' and form.is_valid():
+        usuario_criado = form.save()
+        registrar_atividade(
+            acao='usuario_criado',
+            request=request,
+            usuario=usuario_criado,
+            detalhes=f'Usuário {usuario_criado.username} criado.',
+            dados_extra={'usuario_id': usuario_criado.pk},
+        )
+        messages.success(request, 'Usuário criado com sucesso.')
+        return redirect('gestao_usuarios')
+    return render(request, 'accounts/form_usuario.html', {'form': form, 'titulo': 'Novo Usuário'})
+
+
+@login_required
+def editar_usuario(request, pk):
+    if not request.user.is_administrador():
+        messages.error(request, 'Acesso negado.')
+        return redirect('dashboard')
+    usuario = get_object_or_404(Usuario, pk=pk)
+    form = UsuarioChangeForm(request.POST or None, request.FILES or None, instance=usuario)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        registrar_atividade(
+            acao='usuario_editado',
+            request=request,
+            usuario=usuario,
+            detalhes=f'Usuário {usuario.username} atualizado.',
+            dados_extra={'usuario_id': usuario.pk},
+        )
+        messages.success(request, 'Usuário atualizado com sucesso.')
+        return redirect('gestao_usuarios')
+    return render(request, 'accounts/form_usuario.html', {'form': form, 'titulo': 'Editar Usuário', 'objeto': usuario})
+
+
+@login_required
+def perfil(request):
+    form = PerfilForm(request.POST or None, request.FILES or None, instance=request.user)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        registrar_atividade(
+            acao='perfil_atualizado',
+            request=request,
+            usuario=request.user,
+            autor=request.user,
+            detalhes='Perfil atualizado pelo próprio usuário.',
+        )
+        messages.success(request, 'Perfil atualizado com sucesso.')
+        return redirect('perfil')
+    return render(request, 'accounts/perfil.html', {'form': form})
+
+
+def _contexto_portal(usuario_alvo=None):
+    from processos.models import Processo
+    from agenda.models import Compromisso
+    from financeiro.models import Lancamento
+    from django.utils import timezone
+    from datetime import timedelta
+
+    hoje = timezone.now().date()
+
+    if usuario_alvo is None:
+        processos_qs = Processo.objects.select_related('cliente', 'advogado', 'tipo').all()
+        compromissos_qs = Compromisso.objects.select_related('advogado', 'processo').all()
+        lancamentos_qs = Lancamento.objects.select_related('cliente', 'processo', 'criado_por').all()
+        titulo = 'Portal Administrativo'
+        subtitulo = 'Visão consolidada do escritório'
+    else:
+        processos_qs = Processo.objects.select_related('cliente', 'advogado', 'tipo').filter(advogado=usuario_alvo)
+        compromissos_qs = Compromisso.objects.select_related('advogado', 'processo').filter(advogado=usuario_alvo)
+        lancamentos_qs = Lancamento.objects.select_related('cliente', 'processo', 'criado_por').filter(
+            Q(criado_por=usuario_alvo) | Q(processo__advogado=usuario_alvo)
+        ).distinct()
+        nome = usuario_alvo.get_full_name() or usuario_alvo.username
+        titulo = f'Portal de {nome}'
+        subtitulo = 'Visão individual do advogado'
+
+    totais_financeiro = lancamentos_qs.aggregate(
+        pendente=Sum('valor', filter=Q(status='pendente')),
+        atrasado=Sum('valor', filter=Q(status='atrasado')),
+        pago=Sum('valor', filter=Q(status='pago')),
+    )
+
+    return {
+        'titulo_portal': titulo,
+        'subtitulo_portal': subtitulo,
+        'usuario_alvo': usuario_alvo,
+        'processos_ativos': processos_qs.filter(status='em_andamento').count(),
+        'total_processos': processos_qs.count(),
+        'compromissos_hoje': compromissos_qs.filter(data=hoje, status='pendente').count(),
+        'prazos_7_dias': compromissos_qs.filter(
+            data__gte=hoje,
+            data__lte=hoje + timedelta(days=7),
+            tipo='prazo',
+            status='pendente',
+        ).count(),
+        'financeiro_pendente': totais_financeiro['pendente'] or 0,
+        'financeiro_atrasado': totais_financeiro['atrasado'] or 0,
+        'financeiro_pago': totais_financeiro['pago'] or 0,
+        'processos_recentes': processos_qs.order_by('-criado_em')[:8],
+        'compromissos_proximos': compromissos_qs.filter(data__gte=hoje).order_by('data', 'hora')[:8],
+        'lancamentos_recentes': lancamentos_qs.order_by('-criado_em')[:8],
+        'advogados_portal': Usuario.objects.filter(papel='advogado').order_by('first_name', 'username'),
+    }
+
+
+@login_required
+def meu_portal(request):
+    if request.user.is_administrador():
+        contexto = _contexto_portal(usuario_alvo=None)
+    else:
+        contexto = _contexto_portal(usuario_alvo=request.user)
+    registrar_atividade(
+        acao='acesso_portal',
+        request=request,
+        usuario=request.user,
+        autor=request.user,
+        detalhes='Acesso ao próprio portal.',
+    )
+    return render(request, 'accounts/portal_usuario.html', contexto)
+
+
+@login_required
+def portal_usuario(request, pk):
+    usuario_alvo = get_object_or_404(Usuario, pk=pk)
+    if not request.user.is_administrador() and request.user.pk != usuario_alvo.pk:
+        messages.error(request, 'Você não pode acessar o portal de outro usuário.')
+        return redirect('meu_portal')
+    contexto = _contexto_portal(usuario_alvo=usuario_alvo)
+    registrar_atividade(
+        acao='acesso_portal',
+        request=request,
+        usuario=usuario_alvo,
+        detalhes=f'Acesso ao portal de {usuario_alvo.username}.',
+        dados_extra={'usuario_alvo_id': usuario_alvo.pk},
+    )
+    return render(request, 'accounts/portal_usuario.html', contexto)

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Processo {{ processo.numero }} – CRM Advocacia{% endblock %}
+{% block page_title %}Processo {{ processo.numero }}{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <!-- Ficha do processo -->
+  <div class="col-lg-5">
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between">
+        <strong>Ficha do Processo</strong>
+        <div class="d-flex gap-1">
+          <a href="{% url 'editar_processo' processo.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+          <a href="{% url 'analise_risco' processo.pk %}" class="btn btn-sm btn-outline-info" title="IA – Análise de Risco"><i class="bi bi-robot"></i></a>
+        </div>
+      </div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-5">Número</dt>
+          <dd class="col-7">{{ processo.numero }}</dd>
+          <dt class="col-5">Cliente</dt>
+          <dd class="col-7"><a href="{% url 'detalhe_cliente' processo.cliente.pk %}">{{ processo.cliente }}</a></dd>
+          <dt class="col-5">Advogado</dt>
+          <dd class="col-7">{{ processo.advogado.get_full_name|default:"–" }}</dd>
+          <dt class="col-5">Tipo</dt>
+          <dd class="col-7">{{ processo.tipo|default:"–" }}</dd>
+          <dt class="col-5">Vara</dt>
+          <dd class="col-7">{{ processo.vara|default:"–" }}</dd>
+          <dt class="col-5">Status</dt>
+          <dd class="col-7">
+            <span class="badge {% if processo.status == 'em_andamento' %}bg-primary{% elif processo.status == 'suspenso' %}bg-warning text-dark{% elif processo.status == 'finalizado' %}bg-success{% else %}bg-secondary{% endif %}">
+              {{ processo.get_status_display }}
+            </span>
+          </dd>
+          <dt class="col-5">Valor da Causa</dt>
+          <dd class="col-7">{% if processo.valor_causa %}R$ {{ processo.valor_causa }}{% else %}–{% endif %}</dd>
+          <dt class="col-5">Objeto</dt>
+          <dd class="col-7">{{ processo.objeto }}</dd>
+          <dt class="col-5">Cadastrado</dt>
+          <dd class="col-7">{{ processo.criado_em|date:"d/m/Y" }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <!-- Compromissos vinculados -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <strong>Compromissos / Prazos</strong>
+        <a href="{% url 'novo_compromisso' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i></a>
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for c in processo.compromissos.all %}
+        <li class="list-group-item d-flex justify-content-between">
+          <span><i class="bi bi-calendar me-1"></i>{{ c.data|date:"d/m/Y" }} – {{ c.titulo }}</span>
+          <span class="badge {% if c.tipo == 'prazo' %}bg-danger{% elif c.tipo == 'audiencia' %}bg-primary{% else %}bg-secondary{% endif %}">{{ c.get_tipo_display }}</span>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-muted text-center">Nenhum compromisso.</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-header"><strong>Arquivos do Processo</strong></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'upload_arquivos_processo' processo.pk %}" enctype="multipart/form-data" class="mb-3">
+          {% csrf_token %}
+          <div class="mb-2">
+            {{ form_arquivos.arquivos }}
+            {% if form_arquivos.arquivos.errors %}<div class="text-danger small mt-1">{{ form_arquivos.arquivos.errors|join:" " }}</div>{% endif %}
+          </div>
+          <button type="submit" class="btn btn-sm btn-primary">
+            <i class="bi bi-upload me-1"></i> Enviar Arquivos
+          </button>
+        </form>
+
+        <ul class="list-group list-group-flush">
+          {% for a in arquivos_processo %}
+          <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+            <div>
+              <a href="{{ a.arquivo.url }}" target="_blank" rel="noopener">{{ a.nome_original|default:a.arquivo.name }}</a>
+              <div class="small text-muted">
+                enviado por {{ a.enviado_por.get_full_name|default:a.enviado_por.username|default:"–" }}
+                em {{ a.criado_em|date:"d/m/Y H:i" }}
+              </div>
+            </div>
+          </li>
+          {% empty %}
+          <li class="list-group-item px-0 text-muted">Nenhum arquivo anexado ao processo.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline de movimentações -->
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <strong>Timeline de Movimentações</strong>
+        <a href="{% url 'nova_movimentacao' processo.pk %}" class="btn btn-sm btn-primary"><i class="bi bi-plus me-1"></i> Registrar</a>
+      </div>
+      <div class="card-body">
+        {% for m in movimentacoes %}
+        <div class="d-flex gap-3 mb-3">
+          <div class="text-center" style="min-width:60px">
+            <small class="text-muted">{{ m.data|date:"d/m" }}</small><br>
+            <small class="text-muted">{{ m.data|date:"Y" }}</small>
+          </div>
+          <div class="flex-grow-1 border-start ps-3">
+            <strong>{{ m.titulo }}</strong>
+            <div class="text-muted small">por {{ m.autor.get_full_name|default:m.autor.username|default:"–" }}</div>
+            <p class="mb-1 mt-1">{{ m.descricao }}</p>
+            {% if m.documento %}
+            <a href="{{ m.documento.url }}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="bi bi-paperclip me-1"></i> Documento</a>
+            {% endif %}
+          </div>
+        </div>
+        {% empty %}
+        <p class="text-muted text-center">Nenhuma movimentação registrada.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
