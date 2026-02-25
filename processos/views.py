@@ -1,4 +1,3 @@
-from django import forms
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -58,9 +57,7 @@ def _salvar_arquivos_cliente(cliente, arquivos, usuario):
 def _aplicar_escopo_form_cliente(form, usuario):
     if usuario.is_administrador():
         return
-    form.fields['responsavel'].queryset = form.fields['responsavel'].queryset.filter(pk=usuario.pk)
-    form.fields['responsavel'].initial = usuario
-    form.fields['responsavel'].widget = forms.HiddenInput()
+    form.fields.pop('responsavel', None)
 
 
 # ─── Clientes ────────────────────────────────────────────────────────────────
@@ -125,7 +122,7 @@ def editar_cliente(request, pk):
     _aplicar_escopo_form_cliente(form, request.user)
     if request.method == 'POST' and form.is_valid():
         cliente = form.save(commit=False)
-        if not request.user.is_administrador():
+        if not request.user.is_administrador() and not cliente.responsavel_id:
             cliente.responsavel = request.user
         cliente.save()
         form.save_m2m()

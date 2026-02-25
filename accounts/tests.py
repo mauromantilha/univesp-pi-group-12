@@ -1,6 +1,6 @@
 from django.test import TestCase, Client
 from django.urls import reverse
-from accounts.models import Usuario
+from accounts.models import Usuario, UsuarioAtividadeLog
 from processos.models import Cliente, Comarca, Vara, TipoProcesso, Processo
 from agenda.models import Compromisso
 from jurisprudencia.models import Documento
@@ -60,6 +60,44 @@ class DashboardTest(TestCase):
     def test_dashboard_accessible(self):
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(response.status_code, 200)
+
+
+class GestaoUsuariosViewTest(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.admin = Usuario.objects.create_user(username='adm_gestao', password='pass', papel='administrador')
+        self.advogado = Usuario.objects.create_user(username='adv_gestao', password='pass', papel='advogado')
+
+    def test_admin_acessa_gestao_usuarios(self):
+        self.client.login(username='adm_gestao', password='pass')
+        response = self.client.get(reverse('gestao_usuarios'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Gestão Usuários')
+
+    def test_advogado_nao_acessa_gestao_usuarios(self):
+        self.client.login(username='adv_gestao', password='pass')
+        response = self.client.get(reverse('gestao_usuarios'))
+        self.assertRedirects(response, reverse('dashboard'))
+
+
+class UsuarioAtividadeLogTest(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.admin = Usuario.objects.create_user(username='adm_log', password='pass', papel='administrador')
+        self.user = Usuario.objects.create_user(username='user_log', password='pass123', papel='advogado')
+
+    def test_login_web_gera_log(self):
+        self.client.post(reverse('login'), {'username': 'user_log', 'password': 'pass123'})
+        self.assertTrue(
+            UsuarioAtividadeLog.objects.filter(usuario=self.user, autor=self.user, acao='login_web').exists()
+        )
+
+    def test_acesso_gestao_usuarios_gera_log(self):
+        self.client.login(username='adm_log', password='pass')
+        self.client.get(reverse('gestao_usuarios'))
+        self.assertTrue(
+            UsuarioAtividadeLog.objects.filter(autor=self.admin, acao='gestao_usuarios').exists()
+        )
 
 
 class PortalUsuarioTest(TestCase):

@@ -63,9 +63,10 @@ class ClienteViewSet(viewsets.ModelViewSet):
             serializer.save()
             return
         responsavel = serializer.validated_data.get('responsavel')
-        if responsavel and responsavel.pk != self.request.user.pk:
+        if responsavel and responsavel.pk not in {self.request.user.pk, serializer.instance.responsavel_id}:
             raise PermissionDenied('Você não pode transferir responsável deste cliente.')
-        serializer.save(responsavel=self.request.user)
+        responsavel_final = serializer.instance.responsavel or self.request.user
+        serializer.save(responsavel=responsavel_final)
 
 
 class ProcessoViewSet(viewsets.ModelViewSet):
