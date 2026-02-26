@@ -104,7 +104,7 @@ export default function DashboardFinanceiro() {
             onClick={() => navigate("/financeiro/cobranca")}
             className="btn-secondary text-sm"
           >
-            Cobrança & Time
+            Gestão de Cobrança
           </button>
           <button
             onClick={() => navigate("/financeiro/contas")}

@@ -204,7 +204,7 @@ export default function FinanceiroCobranca() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">🧾 Cobrança, Time Tracking e Faturamento</h1>
+          <h1 className="text-2xl font-bold text-gray-900">🧾 Gestão de Cobrança e Faturamento</h1>
           <p className="text-sm text-gray-500 mt-1">Regras de cobrança, apontamentos de tempo, faturas e recebimento online.</p>
         </div>
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700">
