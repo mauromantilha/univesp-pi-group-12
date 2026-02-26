@@ -24,6 +24,7 @@ from .models import (
     Movimentacao,
     ClienteArquivo,
     ProcessoArquivo,
+    ProcessoPeca,
 )
 from .serializers import (
     ComarcaSerializer, VaraSerializer, TipoProcessoSerializer,
@@ -31,7 +32,7 @@ from .serializers import (
     MovimentacaoSerializer, ClienteArquivoSerializer, ProcessoArquivoSerializer,
     ClienteAutomacaoSerializer, ClienteTarefaSerializer, ClienteContratoSerializer,
     ProcessoParteSerializer, ProcessoResponsavelSerializer, ProcessoTarefaSerializer,
-    DocumentoTemplateSerializer,
+    DocumentoTemplateSerializer, ProcessoPecaSerializer,
 )
 
 WORKFLOW_ETAPAS = {
@@ -375,6 +376,7 @@ class ProcessoViewSet(viewsets.ModelViewSet):
         'partes',
         'responsaveis__usuario',
         'tarefas__responsavel',
+        'pecas',
     ).all()
     permission_classes = [IsAdvogadoOuAdministradorWrite]
     search_fields = ['numero', 'cliente__nome', 'objeto']
@@ -802,6 +804,64 @@ class ProcessoViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save(criado_por=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get', 'post'], url_path='pecas')
+    def pecas(self, request, pk=None):
+        processo = self.get_object()
+        if request.method == 'GET':
+            qs = processo.pecas.select_related('criado_por', 'atualizado_por').all()
+            status_filtro = request.query_params.get('status')
+            tipo_filtro = request.query_params.get('tipo')
+            termo = request.query_params.get('q')
+            if status_filtro:
+                qs = qs.filter(status=status_filtro)
+            if tipo_filtro:
+                qs = qs.filter(tipo_peca=tipo_filtro)
+            if termo:
+                qs = qs.filter(Q(titulo__icontains=termo) | Q(conteudo__icontains=termo))
+            serializer = ProcessoPecaSerializer(qs, many=True)
+            return Response(serializer.data)
+
+        if not self._is_responsavel_do_processo(processo):
+            raise PermissionDenied('Você não pode criar peças neste processo.')
+
+        payload = request.data.copy()
+        payload['processo'] = processo.id
+        serializer = ProcessoPecaSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        titulo = serializer.validated_data.get('titulo', '').strip()
+        tipo_peca = serializer.validated_data.get('tipo_peca')
+        ultima_versao = (
+            processo.pecas.filter(titulo=titulo, tipo_peca=tipo_peca)
+            .aggregate(maior=Max('versao'))
+            .get('maior')
+            or 0
+        )
+        serializer.save(
+            criado_por=request.user,
+            atualizado_por=request.user,
+            versao=ultima_versao + 1,
+        )
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['patch', 'delete'], url_path=r'pecas/(?P<peca_id>[^/.]+)')
+    def gerenciar_peca(self, request, pk=None, peca_id=None):
+        processo = self.get_object()
+        if not self._is_responsavel_do_processo(processo):
+            raise PermissionDenied('Você não pode alterar peças neste processo.')
+        try:
+            peca = processo.pecas.get(pk=peca_id)
+        except ProcessoPeca.DoesNotExist:
+            return Response({'detail': 'Peça não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.method == 'DELETE':
+            peca.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        serializer = ProcessoPecaSerializer(peca, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(atualizado_por=request.user)
+        return Response(serializer.data)
 
 
 class MovimentacaoViewSet(viewsets.ModelViewSet):

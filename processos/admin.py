@@ -6,6 +6,7 @@ from .models import (
     ClienteContrato,
     Processo,
     ProcessoArquivo,
+    ProcessoPeca,
     ClienteArquivo,
     Movimentacao,
     Comarca,
@@ -39,6 +40,13 @@ class ProcessoArquivoAdmin(admin.ModelAdmin):
     list_display = ('nome_original', 'processo', 'enviado_por', 'criado_em')
     list_filter = ('criado_em',)
     search_fields = ('nome_original', 'processo__numero')
+
+
+@admin.register(ProcessoPeca)
+class ProcessoPecaAdmin(admin.ModelAdmin):
+    list_display = ('titulo', 'processo', 'tipo_peca', 'status', 'versao', 'criado_por', 'atualizado_em')
+    list_filter = ('tipo_peca', 'status')
+    search_fields = ('titulo', 'processo__numero', 'conteudo')
 
 
 @admin.register(ClienteArquivo)

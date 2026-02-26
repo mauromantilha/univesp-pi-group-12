@@ -15,6 +15,7 @@ from .models import (
     Movimentacao,
     ClienteArquivo,
     ProcessoArquivo,
+    ProcessoPeca,
 )
 
 
@@ -369,6 +370,35 @@ class ProcessoArquivoSerializer(serializers.ModelSerializer):
         if obj.template:
             return obj.template.nome
         return obj.template_nome
+
+
+class ProcessoPecaSerializer(serializers.ModelSerializer):
+    tipo_peca_display = serializers.CharField(source='get_tipo_peca_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    criado_por_nome = serializers.CharField(source='criado_por.get_full_name', read_only=True)
+    atualizado_por_nome = serializers.CharField(source='atualizado_por.get_full_name', read_only=True)
+
+    class Meta:
+        model = ProcessoPeca
+        fields = [
+            'id',
+            'processo',
+            'titulo',
+            'tipo_peca',
+            'tipo_peca_display',
+            'status',
+            'status_display',
+            'conteudo',
+            'versao',
+            'ia_score_qualidade',
+            'ia_revisao',
+            'criado_por',
+            'criado_por_nome',
+            'atualizado_por',
+            'atualizado_por_nome',
+            'criado_em',
+            'atualizado_em',
+        ]
 
 
 class ProcessoListSerializer(serializers.ModelSerializer):

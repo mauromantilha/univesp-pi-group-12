@@ -101,6 +101,13 @@ const EMPTY_PRAZO_FORM = {
   alerta_horas_antes: 0,
 };
 
+const EMPTY_PECA_FORM = {
+  titulo: "",
+  tipo_peca: "peticao",
+  status: "rascunho",
+  conteudo: "",
+};
+
 function toList(payload) {
   if (Array.isArray(payload)) return payload;
   return payload?.results || [];
@@ -131,6 +138,7 @@ export default function ProcessoDetail() {
   const [responsaveis, setResponsaveis] = useState([]);
   const [tarefas, setTarefas] = useState([]);
   const [prazos, setPrazos] = useState([]);
+  const [pecas, setPecas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
 
   const [workflowForm, setWorkflowForm] = useState({ tipo_caso: "contencioso", etapa_workflow: "triagem" });
@@ -138,6 +146,10 @@ export default function ProcessoDetail() {
   const [responsavelForm, setResponsavelForm] = useState(EMPTY_RESP_FORM);
   const [tarefaForm, setTarefaForm] = useState(EMPTY_TAREFA_FORM);
   const [prazoForm, setPrazoForm] = useState(EMPTY_PRAZO_FORM);
+  const [pecaForm, setPecaForm] = useState(EMPTY_PECA_FORM);
+  const [selectedPecaId, setSelectedPecaId] = useState(null);
+  const [revisaoPecaIA, setRevisaoPecaIA] = useState(null);
+  const [loadingPecaIA, setLoadingPecaIA] = useState(false);
 
   const [analise, setAnalise] = useState(null);
   const [loadingAnalise, setLoadingAnalise] = useState(false);
@@ -176,12 +188,13 @@ export default function ProcessoDetail() {
   }
 
   async function carregarEstruturas() {
-    const [w, p, r, t, pr, u] = await Promise.all([
+    const [w, p, r, t, pr, pe, u] = await Promise.all([
       api.get(`/processos/${id}/workflow/`).catch(() => ({ data: null })),
       api.get(`/processos/${id}/partes/`).catch(() => ({ data: [] })),
       api.get(`/processos/${id}/responsaveis/`).catch(() => ({ data: [] })),
       api.get(`/processos/${id}/tarefas/`).catch(() => ({ data: [] })),
       api.get(`/processos/${id}/prazos/`).catch(() => ({ data: [] })),
+      api.get(`/processos/${id}/pecas/`).catch(() => ({ data: [] })),
       api.get("/usuarios/?limit=400").catch(() => ({ data: [] })),
     ]);
 
@@ -196,6 +209,7 @@ export default function ProcessoDetail() {
     setResponsaveis(toList(r.data));
     setTarefas(toList(t.data));
     setPrazos(toList(pr.data));
+    setPecas(toList(pe.data));
     setUsuarios(toList(u.data));
   }
 
@@ -431,6 +445,108 @@ export default function ProcessoDetail() {
       toast.success("Prazo concluído");
     } catch {
       toast.error("Falha ao concluir prazo");
+    }
+  }
+
+  async function salvarPeca(e) {
+    e.preventDefault();
+    if (!processo) return;
+    if (!pecaForm.titulo.trim()) {
+      toast.error("Informe o título da peça");
+      return;
+    }
+    if (!pecaForm.conteudo.trim()) {
+      toast.error("Informe o conteúdo da peça");
+      return;
+    }
+
+    try {
+      if (selectedPecaId) {
+        await api.patch(`/processos/${processo.id}/pecas/${selectedPecaId}/`, pecaForm);
+        toast.success("Peça atualizada");
+      } else {
+        await api.post(`/processos/${processo.id}/pecas/`, pecaForm);
+        toast.success("Peça criada");
+      }
+      setPecaForm(EMPTY_PECA_FORM);
+      setSelectedPecaId(null);
+      setRevisaoPecaIA(null);
+      await carregarEstruturas();
+    } catch {
+      toast.error("Erro ao salvar peça");
+    }
+  }
+
+  function editarPeca(item) {
+    setSelectedPecaId(item.id);
+    setPecaForm({
+      titulo: item.titulo || "",
+      tipo_peca: item.tipo_peca || "peticao",
+      status: item.status || "rascunho",
+      conteudo: item.conteudo || "",
+    });
+    setRevisaoPecaIA(item.ia_revisao || null);
+  }
+
+  async function excluirPeca(item) {
+    if (!processo) return;
+    if (!confirm(`Excluir a peça "${item.titulo}"?`)) return;
+    try {
+      await api.delete(`/processos/${processo.id}/pecas/${item.id}/`);
+      if (selectedPecaId === item.id) {
+        setSelectedPecaId(null);
+        setPecaForm(EMPTY_PECA_FORM);
+        setRevisaoPecaIA(null);
+      }
+      await carregarEstruturas();
+      toast.success("Peça excluída");
+    } catch {
+      toast.error("Erro ao excluir peça");
+    }
+  }
+
+  async function gerarMinutaIA() {
+    if (!processo) return;
+    setLoadingPecaIA(true);
+    try {
+      const res = await api.post("/ia/analises/redigir-peca/", {
+        processo_id: processo.id,
+        tipo_peca: pecaForm.tipo_peca,
+        objetivo: pecaForm.titulo || processo.objeto,
+        tese_principal: processo.objeto,
+      });
+      setPecaForm((prev) => ({ ...prev, conteudo: res.data?.texto || prev.conteudo }));
+      toast.success("Minuta gerada por IA");
+    } catch {
+      toast.error("Erro ao gerar minuta com IA");
+    } finally {
+      setLoadingPecaIA(false);
+    }
+  }
+
+  async function revisarPecaIA() {
+    if (!pecaForm.conteudo.trim()) {
+      toast.error("Escreva a peça antes de revisar");
+      return;
+    }
+    setLoadingPecaIA(true);
+    try {
+      const res = await api.post("/ia/analises/revisar-peca/", {
+        tipo_peca: pecaForm.tipo_peca,
+        texto: pecaForm.conteudo,
+      });
+      setRevisaoPecaIA(res.data);
+      if (selectedPecaId) {
+        await api.patch(`/processos/${processo.id}/pecas/${selectedPecaId}/`, {
+          ia_revisao: res.data,
+          ia_score_qualidade: res.data?.score_qualidade || 0,
+        });
+      }
+      toast.success("Revisão IA concluída");
+    } catch {
+      toast.error("Erro na revisão IA");
+    } finally {
+      setLoadingPecaIA(false);
     }
   }
 
@@ -726,6 +842,136 @@ export default function ProcessoDetail() {
         </div>
       </div>
 
+      <div className="card space-y-4">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h2 className="text-base font-semibold">Peças e Recursos (Assistente IA)</h2>
+          {selectedPecaId && (
+            <button
+              onClick={() => {
+                setSelectedPecaId(null);
+                setPecaForm(EMPTY_PECA_FORM);
+                setRevisaoPecaIA(null);
+              }}
+              className="btn-secondary text-xs"
+            >
+              Novo Rascunho
+            </button>
+          )}
+        </div>
+
+        <form onSubmit={salvarPeca} className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="md:col-span-2">
+              <label className="label">Título</label>
+              <input
+                className="input"
+                value={pecaForm.titulo}
+                onChange={(e) => setPecaForm({ ...pecaForm, titulo: e.target.value })}
+                placeholder="Ex.: Contestação inicial"
+              />
+            </div>
+            <div>
+              <label className="label">Tipo</label>
+              <select
+                className="input"
+                value={pecaForm.tipo_peca}
+                onChange={(e) => setPecaForm({ ...pecaForm, tipo_peca: e.target.value })}
+              >
+                <option value="defesa">Defesa</option>
+                <option value="recurso">Recurso</option>
+                <option value="peticao">Petição</option>
+                <option value="manifestacao">Manifestação</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Conteúdo da Peça</label>
+            <textarea
+              className="input min-h-[240px] font-mono text-xs"
+              value={pecaForm.conteudo}
+              onChange={(e) => setPecaForm({ ...pecaForm, conteudo: e.target.value })}
+              placeholder="Estruture em fatos, direito e pedidos..."
+            />
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
+            <button type="button" onClick={gerarMinutaIA} className="btn-secondary text-sm" disabled={loadingPecaIA}>
+              {loadingPecaIA ? "Processando..." : "Gerar Minuta IA"}
+            </button>
+            <button type="button" onClick={revisarPecaIA} className="btn-secondary text-sm" disabled={loadingPecaIA}>
+              {loadingPecaIA ? "Processando..." : "Revisar IA"}
+            </button>
+            <button type="submit" className="btn-primary text-sm">
+              {selectedPecaId ? "Salvar Alterações" : "Salvar Peça"}
+            </button>
+          </div>
+        </form>
+
+        {revisaoPecaIA && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <div className="text-sm font-semibold text-blue-800">
+              Score IA: {revisaoPecaIA.score_qualidade ?? 0}/100
+            </div>
+            {revisaoPecaIA.riscos_indeferimento?.length > 0 && (
+              <div className="mt-2 text-xs text-red-700">
+                <div className="font-semibold">Riscos de indeferimento:</div>
+                {revisaoPecaIA.riscos_indeferimento.map((item, idx) => (
+                  <div key={idx}>• {item}</div>
+                ))}
+              </div>
+            )}
+            {revisaoPecaIA.erros_gramatica?.length > 0 && (
+              <div className="mt-2 text-xs text-amber-700">
+                <div className="font-semibold">Erros de gramática:</div>
+                {revisaoPecaIA.erros_gramatica.map((item, idx) => (
+                  <div key={idx}>• {item}</div>
+                ))}
+              </div>
+            )}
+            {revisaoPecaIA.erros_logica?.length > 0 && (
+              <div className="mt-2 text-xs text-red-700">
+                <div className="font-semibold">Erros de lógica:</div>
+                {revisaoPecaIA.erros_logica.map((item, idx) => (
+                  <div key={idx}>• {item}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+          {pecas.length === 0 ? (
+            <p className="text-sm text-gray-400">Nenhuma peça cadastrada para este processo.</p>
+          ) : (
+            pecas.map((item) => (
+              <div key={item.id} className="rounded-lg border border-gray-200 p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-medium">{item.titulo}</div>
+                    <div className="text-xs text-gray-500">
+                      {item.tipo_peca_display || item.tipo_peca} • v{item.versao} • {item.status_display || item.status}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => editarPeca(item)} className="btn-secondary text-xs px-3 py-1">
+                      Editar
+                    </button>
+                    <button onClick={() => excluirPeca(item)} className="btn-secondary text-xs px-3 py-1 text-red-700">
+                      Excluir
+                    </button>
+                  </div>
+                </div>
+                {item.ia_score_qualidade ? (
+                  <div className="text-xs text-blue-700 mt-1">Score IA: {item.ia_score_qualidade}/100</div>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold">Análise de Risco (IA)</h2>
@@ -737,7 +983,9 @@ export default function ProcessoDetail() {
           <div className="space-y-3">
             <div className="flex items-center gap-4">
               <div className="text-center">
-                <div className="text-3xl font-bold text-primary-700">{Math.round((analise.probabilidade_exito || 0) * 100)}%</div>
+                <div className="text-3xl font-bold text-primary-700">
+                  {Number(analise.probabilidade_sucesso ?? analise.probabilidade_exito ?? 0).toFixed(2)}%
+                </div>
                 <div className="text-xs text-gray-500">Prob. de Êxito</div>
               </div>
               <div className="text-center">

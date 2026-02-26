@@ -3,6 +3,7 @@ import axios from "axios";
 const API_BASE = import.meta.env.VITE_API_URL || "/api/v1";
 
 const api = axios.create({ baseURL: API_BASE });
+let isReportingFrontendError = false;
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("access_token");
@@ -13,7 +14,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (r) => r,
   async (error) => {
-    const original = error.config;
+    const original = error.config || {};
+    const requestUrl = original?.url || "";
+    const status = error.response?.status;
+
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
       const refresh = localStorage.getItem("refresh_token");
@@ -30,6 +34,47 @@ api.interceptors.response.use(
         }
       }
     }
+
+    const skipLog = original?.headers?.["X-Skip-Error-Log"];
+    const shouldReport =
+      !skipLog &&
+      !isReportingFrontendError &&
+      !requestUrl.includes("/ia/analises/registrar-erro/") &&
+      (status >= 500 || !status);
+
+    if (shouldReport) {
+      const token = localStorage.getItem("access_token");
+      if (token) {
+        try {
+          isReportingFrontendError = true;
+          await axios.post(
+            `${API_BASE}/ia/analises/registrar-erro/`,
+            {
+              tipo: "frontend",
+              severidade: "alerta",
+              mensagem: `Erro HTTP ${status || "network"} no frontend`,
+              rota: requestUrl || window.location.pathname,
+              detalhes: {
+                method: original?.method,
+                status: status || null,
+                response_data: error.response?.data || null,
+              },
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "X-Skip-Error-Log": "1",
+              },
+            }
+          );
+        } catch {
+          // Silencioso: não quebrar o fluxo principal por falha no monitoramento.
+        } finally {
+          isReportingFrontendError = false;
+        }
+      }
+    }
+
     return Promise.reject(error);
   }
 );

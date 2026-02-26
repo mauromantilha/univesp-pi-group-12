@@ -545,6 +545,62 @@ class ProcessoArquivo(models.Model):
         return self.nome_original or self.arquivo.name
 
 
+class ProcessoPeca(models.Model):
+    TIPO_PECA_CHOICES = [
+        ('defesa', 'Peça de Defesa'),
+        ('recurso', 'Recurso'),
+        ('peticao', 'Petição'),
+        ('manifestacao', 'Manifestação'),
+        ('outro', 'Outra Peça'),
+    ]
+    STATUS_CHOICES = [
+        ('rascunho', 'Rascunho'),
+        ('em_revisao', 'Em Revisão'),
+        ('finalizada', 'Finalizada'),
+        ('protocolada', 'Protocolada'),
+    ]
+
+    processo = models.ForeignKey(
+        Processo,
+        on_delete=models.CASCADE,
+        related_name='pecas',
+        verbose_name='Processo',
+    )
+    titulo = models.CharField(max_length=220, verbose_name='Título')
+    tipo_peca = models.CharField(max_length=20, choices=TIPO_PECA_CHOICES, default='peticao', verbose_name='Tipo da Peça')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='rascunho', verbose_name='Status')
+    conteudo = models.TextField(verbose_name='Conteúdo')
+    versao = models.PositiveIntegerField(default=1, verbose_name='Versão')
+    ia_score_qualidade = models.PositiveSmallIntegerField(default=0, verbose_name='Score IA de Qualidade')
+    ia_revisao = models.JSONField(blank=True, null=True, verbose_name='Revisão IA')
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pecas_processo_criadas',
+        verbose_name='Criado por',
+    )
+    atualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pecas_processo_atualizadas',
+        verbose_name='Atualizado por',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Peça do Processo'
+        verbose_name_plural = 'Peças do Processo'
+        ordering = ['-atualizado_em']
+
+    def __str__(self):
+        return f'{self.processo.numero} - {self.titulo} (v{self.versao})'
+
+
 class ClienteArquivo(models.Model):
     cliente = models.ForeignKey(
         Cliente,
