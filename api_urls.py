@@ -13,6 +13,7 @@ from jurisprudencia.api_views import DocumentoViewSet
 from ia_preditiva.api_views import AnaliseRiscoViewSet, ia_chat, ia_sugerir
 from consulta_tribunais.api_views import TribunalViewSet, ConsultaProcessoViewSet
 from financeiro.api_views import LancamentoViewSet, CategoriaFinanceiraViewSet, ContaBancariaViewSet
+from financeiro.api_views import RegraCobrancaViewSet, ApontamentoTempoViewSet, FaturaViewSet
 
 router = DefaultRouter()
 
@@ -47,6 +48,9 @@ router.register(r'consultas-tribunais', ConsultaProcessoViewSet, basename='consu
 router.register(r'financeiro/lancamentos', LancamentoViewSet, basename='lancamento')
 router.register(r'financeiro/categorias', CategoriaFinanceiraViewSet, basename='categoria-financeira')
 router.register(r'financeiro/contas', ContaBancariaViewSet, basename='conta-bancaria')
+router.register(r'financeiro/regras-cobranca', RegraCobrancaViewSet, basename='regra-cobranca')
+router.register(r'financeiro/apontamentos-tempo', ApontamentoTempoViewSet, basename='apontamento-tempo')
+router.register(r'financeiro/faturas', FaturaViewSet, basename='fatura')
 
 urlpatterns = [
     # Auth endpoints

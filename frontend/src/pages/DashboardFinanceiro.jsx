@@ -101,6 +101,12 @@ export default function DashboardFinanceiro() {
             + Novo Lançamento
           </button>
           <button
+            onClick={() => navigate("/financeiro/cobranca")}
+            className="btn-secondary text-sm"
+          >
+            Cobrança & Time
+          </button>
+          <button
             onClick={() => navigate("/financeiro/contas")}
             className="btn-secondary text-sm"
           >

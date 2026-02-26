@@ -1,5 +1,17 @@
+from decimal import Decimal
+
 from rest_framework import serializers
-from .models import Lancamento, CategoriaFinanceira, ContaBancaria, LancamentoArquivo
+
+from .models import (
+    Lancamento,
+    CategoriaFinanceira,
+    ContaBancaria,
+    LancamentoArquivo,
+    RegraCobranca,
+    ApontamentoTempo,
+    Fatura,
+    FaturaItem,
+)
 
 
 class CategoriaFinanceiraSerializer(serializers.ModelSerializer):
@@ -64,9 +76,184 @@ class LancamentoSerializer(serializers.ModelSerializer):
             'conta_bancaria', 'conta_bancaria_nome', 'conta_bancaria_id',
             'tipo', 'tipo_display', 'descricao', 'valor',
             'data_vencimento', 'data_pagamento',
-            'status', 'status_display', 'observacoes',
+            'status', 'status_display',
+            'reembolsavel_cliente', 'faturado_em',
+            'observacoes',
             'criado_em', 'atualizado_em',
         ]
+
+
+class RegraCobrancaSerializer(serializers.ModelSerializer):
+    tipo_cobranca_display = serializers.CharField(source='get_tipo_cobranca_display', read_only=True)
+    cliente_nome = serializers.CharField(source='cliente.nome', read_only=True)
+    processo_numero = serializers.CharField(source='processo.numero', read_only=True)
+
+    class Meta:
+        model = RegraCobranca
+        fields = [
+            'id',
+            'cliente',
+            'cliente_nome',
+            'processo',
+            'processo_numero',
+            'titulo',
+            'tipo_cobranca',
+            'tipo_cobranca_display',
+            'valor_hora',
+            'percentual_exito',
+            'valor_pacote',
+            'valor_recorrente',
+            'dia_vencimento_recorrencia',
+            'ativo',
+            'observacoes',
+            'criado_em',
+            'atualizado_em',
+        ]
+
+    def validate(self, attrs):
+        tipo = attrs.get('tipo_cobranca') or getattr(self.instance, 'tipo_cobranca', None)
+        valor_hora = attrs.get('valor_hora', getattr(self.instance, 'valor_hora', None))
+        percentual_exito = attrs.get('percentual_exito', getattr(self.instance, 'percentual_exito', None))
+        valor_pacote = attrs.get('valor_pacote', getattr(self.instance, 'valor_pacote', None))
+        valor_recorrente = attrs.get('valor_recorrente', getattr(self.instance, 'valor_recorrente', None))
+
+        if tipo == 'hora' and not valor_hora:
+            raise serializers.ValidationError({'valor_hora': 'Informe o valor/hora para cobrança por hora.'})
+        if tipo == 'exito' and not percentual_exito:
+            raise serializers.ValidationError({'percentual_exito': 'Informe o percentual de êxito.'})
+        if tipo == 'pacote' and not valor_pacote:
+            raise serializers.ValidationError({'valor_pacote': 'Informe o valor do pacote.'})
+        if tipo == 'recorrencia' and not valor_recorrente:
+            raise serializers.ValidationError({'valor_recorrente': 'Informe o valor recorrente.'})
+
+        return attrs
+
+
+class ApontamentoTempoSerializer(serializers.ModelSerializer):
+    cliente_nome = serializers.CharField(source='cliente.nome', read_only=True)
+    processo_numero = serializers.CharField(source='processo.numero', read_only=True)
+    responsavel_nome = serializers.CharField(source='responsavel.get_full_name', read_only=True)
+    regra_titulo = serializers.CharField(source='regra_cobranca.titulo', read_only=True)
+    horas = serializers.SerializerMethodField()
+    valor_estimado = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ApontamentoTempo
+        fields = [
+            'id',
+            'cliente',
+            'cliente_nome',
+            'processo',
+            'processo_numero',
+            'responsavel',
+            'responsavel_nome',
+            'regra_cobranca',
+            'regra_titulo',
+            'data',
+            'descricao',
+            'minutos',
+            'horas',
+            'valor_hora',
+            'valor_estimado',
+            'faturado_em',
+            'ativo',
+            'criado_em',
+            'atualizado_em',
+        ]
+
+    def get_horas(self, obj):
+        return float(obj.horas or 0)
+
+    def get_valor_estimado(self, obj):
+        valor_hora = obj.valor_hora
+        if not valor_hora and obj.regra_cobranca and obj.regra_cobranca.valor_hora:
+            valor_hora = obj.regra_cobranca.valor_hora
+        if not valor_hora:
+            return 0.0
+        return float((obj.horas or Decimal('0')) * valor_hora)
+
+    def validate(self, attrs):
+        cliente = attrs.get('cliente')
+        processo = attrs.get('processo')
+        if processo and cliente and processo.cliente_id != cliente.id:
+            raise serializers.ValidationError({'processo': 'O processo selecionado não pertence ao cliente informado.'})
+        if processo and not cliente:
+            attrs['cliente'] = processo.cliente
+        return attrs
+
+
+class FaturaItemSerializer(serializers.ModelSerializer):
+    tipo_item_display = serializers.CharField(source='get_tipo_item_display', read_only=True)
+
+    class Meta:
+        model = FaturaItem
+        fields = [
+            'id',
+            'fatura',
+            'tipo_item',
+            'tipo_item_display',
+            'descricao',
+            'quantidade',
+            'valor_unitario',
+            'valor_total',
+            'apontamento',
+            'lancamento_despesa',
+            'criado_em',
+        ]
+
+
+class FaturaSerializer(serializers.ModelSerializer):
+    cliente_nome = serializers.CharField(source='cliente.nome', read_only=True)
+    processo_numero = serializers.CharField(source='processo.numero', read_only=True)
+    regra_titulo = serializers.CharField(source='regra_cobranca.titulo', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    online_status_display = serializers.CharField(source='get_online_status_display', read_only=True)
+    gateway_display = serializers.CharField(source='get_gateway_display', read_only=True)
+    itens = FaturaItemSerializer(many=True, read_only=True)
+    lancamento_receber_id = serializers.IntegerField(source='lancamento_receber.id', read_only=True)
+
+    class Meta:
+        model = Fatura
+        fields = [
+            'id',
+            'numero',
+            'cliente',
+            'cliente_nome',
+            'processo',
+            'processo_numero',
+            'regra_cobranca',
+            'regra_titulo',
+            'periodo_inicio',
+            'periodo_fim',
+            'data_emissao',
+            'data_vencimento',
+            'status',
+            'status_display',
+            'subtotal_tempo',
+            'subtotal_despesas',
+            'subtotal_outros',
+            'total',
+            'gateway',
+            'gateway_display',
+            'online_status',
+            'online_status_display',
+            'online_external_id',
+            'online_url',
+            'data_recebimento_online',
+            'lancamento_receber_id',
+            'observacoes',
+            'itens',
+            'criado_em',
+            'atualizado_em',
+        ]
+
+    read_only_fields = [
+        'numero',
+        'subtotal_tempo',
+        'subtotal_despesas',
+        'subtotal_outros',
+        'total',
+    ]
 
 
 class LancamentoArquivoSerializer(serializers.ModelSerializer):

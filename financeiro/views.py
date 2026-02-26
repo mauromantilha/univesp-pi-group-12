@@ -14,7 +14,9 @@ def _lancamentos_usuario(usuario):
     if usuario.is_administrador():
         return Lancamento.objects.select_related('cliente', 'processo', 'criado_por')
     return Lancamento.objects.select_related('cliente', 'processo', 'criado_por').filter(
-        Q(criado_por=usuario) | Q(processo__advogado=usuario)
+        Q(criado_por=usuario)
+        | Q(processo__advogado=usuario)
+        | Q(processo__responsaveis__usuario=usuario, processo__responsaveis__ativo=True)
     ).distinct()
 
 
@@ -85,9 +87,14 @@ def novo_lancamento(request):
         return bloqueio
     form = LancamentoForm(request.POST or None, request.FILES or None)
     if not request.user.is_administrador():
-        processos_usuario = Processo.objects.filter(advogado=request.user).select_related('cliente')
+        processos_usuario = Processo.objects.filter(
+            Q(advogado=request.user) | Q(responsaveis__usuario=request.user, responsaveis__ativo=True)
+        ).select_related('cliente').distinct()
         form.fields['processo'].queryset = processos_usuario
-        form.fields['cliente'].queryset = form.fields['cliente'].queryset.filter(processos__advogado=request.user).distinct()
+        form.fields['cliente'].queryset = form.fields['cliente'].queryset.filter(
+            Q(processos__advogado=request.user)
+            | Q(processos__responsaveis__usuario=request.user, processos__responsaveis__ativo=True)
+        ).distinct()
     if request.method == 'POST' and form.is_valid():
         lancamento = form.save(commit=False)
         if (
@@ -116,9 +123,14 @@ def editar_lancamento(request, pk):
     lancamento = get_object_or_404(_lancamentos_usuario(request.user), pk=pk)
     form = LancamentoForm(request.POST or None, request.FILES or None, instance=lancamento)
     if not request.user.is_administrador():
-        processos_usuario = Processo.objects.filter(advogado=request.user).select_related('cliente')
+        processos_usuario = Processo.objects.filter(
+            Q(advogado=request.user) | Q(responsaveis__usuario=request.user, responsaveis__ativo=True)
+        ).select_related('cliente').distinct()
         form.fields['processo'].queryset = processos_usuario
-        form.fields['cliente'].queryset = form.fields['cliente'].queryset.filter(processos__advogado=request.user).distinct()
+        form.fields['cliente'].queryset = form.fields['cliente'].queryset.filter(
+            Q(processos__advogado=request.user)
+            | Q(processos__responsaveis__usuario=request.user, processos__responsaveis__ativo=True)
+        ).distinct()
     if request.method == 'POST' and form.is_valid():
         lancamento_editado = form.save(commit=False)
         if (
@@ -155,7 +167,9 @@ def api_cliente_do_processo(request, processo_pk):
     """Retorna JSON com o ID e nome do cliente de um processo (usado via JS no formulário)."""
     processos_qs = Processo.objects.select_related('cliente')
     if not request.user.is_administrador():
-        processos_qs = processos_qs.filter(advogado=request.user)
+        processos_qs = processos_qs.filter(
+            Q(advogado=request.user) | Q(responsaveis__usuario=request.user, responsaveis__ativo=True)
+        ).distinct()
     processo = get_object_or_404(processos_qs, pk=processo_pk)
     return JsonResponse({'cliente_id': processo.cliente.pk, 'cliente_nome': processo.cliente.nome})
 

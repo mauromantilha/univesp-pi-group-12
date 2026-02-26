@@ -24,16 +24,21 @@ function fmtDate(d) {
   return new Date(d + "T00:00:00").toLocaleDateString("pt-BR");
 }
 
+function isTipoReceita(tipo) {
+  return ["receber", "honorario", "reembolso", "pagamento"].includes(tipo);
+}
+
 // ----------- Modal Novo Lançamento -----------
 function ModalNovo({ onClose, onSaved, categorias, contas }) {
   const [form, setForm] = useState({
-    tipo: "receita",
+    tipo: "receber",
     descricao: "",
     valor: "",
     data_vencimento: "",
     categoria: "",
     conta_bancaria: "",
     processo: "",
+    reembolsavel_cliente: false,
     observacoes: "",
   });
   const [saving, setSaving] = useState(false);
@@ -53,7 +58,7 @@ function ModalNovo({ onClose, onSaved, categorias, contas }) {
     try {
       await api.post("/financeiro/lancamentos/", {
         ...form,
-        tipo: form.tipo === "receita" ? "receber" : "pagar",
+        tipo: form.tipo,
         valor: parseFloat(form.valor.replace(",", ".")),
         processo: form.processo || null,
         conta_bancaria: form.conta_bancaria || null,
@@ -77,20 +82,20 @@ function ModalNovo({ onClose, onSaved, categorias, contas }) {
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {/* Tipo */}
           <div className="flex gap-2">
-            {["receita", "despesa"].map((t) => (
+            {["receber", "pagar"].map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => set("tipo", t)}
                 className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
                   form.tipo === t
-                    ? t === "receita"
+                    ? t === "receber"
                       ? "bg-green-500 text-white border-green-500"
                       : "bg-red-500 text-white border-red-500"
                     : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
                 }`}
               >
-                {t === "receita" ? "📈 Receita" : "📉 Despesa"}
+                {t === "receber" ? "📈 A Receber" : "📉 A Pagar"}
               </button>
             ))}
           </div>
@@ -131,6 +136,14 @@ function ModalNovo({ onClose, onSaved, categorias, contas }) {
             <label className="label">Observações</label>
             <textarea className="input" rows={2} value={form.observacoes} onChange={(e) => set("observacoes", e.target.value)} />
           </div>
+          <label className="text-sm flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={!!form.reembolsavel_cliente}
+              onChange={(e) => set("reembolsavel_cliente", e.target.checked)}
+            />
+            Marcar como despesa reembolsável ao cliente
+          </label>
 
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancelar</button>
@@ -180,8 +193,8 @@ function ModalBaixa({ lancamento, contas, onClose, onSaved }) {
           <div className="bg-gray-50 rounded-lg p-3 text-sm">
             <div className="font-medium text-gray-800">{lancamento.descricao}</div>
             <div className="text-gray-500 mt-1">
-              {lancamento.tipo === "receber" ? "📈 A Receber" : "📉 A Pagar"} ·{" "}
-              <span className={lancamento.tipo === "receber" ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
+              {isTipoReceita(lancamento.tipo) ? "📈 A Receber" : "📉 A Pagar"} ·{" "}
+              <span className={isTipoReceita(lancamento.tipo) ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
                 {fmtBRL(lancamento.valor)}
               </span>
             </div>
@@ -330,6 +343,7 @@ export default function Lancamentos() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Descrição</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Cliente</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Categoria</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Reembolso</th>
               <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Valor</th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Ações</th>
@@ -338,11 +352,11 @@ export default function Lancamentos() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="text-center py-10 text-gray-400">Carregando...</td>
+                <td colSpan={8} className="text-center py-10 text-gray-400">Carregando...</td>
               </tr>
             ) : lancamentos.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-10 text-gray-400">
+                <td colSpan={8} className="text-center py-10 text-gray-400">
                   Nenhum lançamento encontrado
                 </td>
               </tr>
@@ -357,8 +371,11 @@ export default function Lancamentos() {
                   <td className="px-4 py-3 max-w-xs truncate">{l.descricao}</td>
                   <td className="px-4 py-3 text-gray-500">{l.cliente_nome || "—"}</td>
                   <td className="px-4 py-3 text-gray-500">{l.categoria_nome || "—"}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">
+                    {l.reembolsavel_cliente ? "Reembolsável" : "—"}
+                  </td>
                   <td className={`px-4 py-3 text-right font-semibold ${
-                    l.tipo === "receber" ? "text-green-600" : "text-red-600"
+                    isTipoReceita(l.tipo) ? "text-green-600" : "text-red-600"
                   }`}>
                     {fmtBRL(l.valor)}
                   </td>

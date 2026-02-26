@@ -15,6 +15,7 @@ const navBase = [
   { to: "/consulta-tribunais", icon: "🏛️", label: "Consulta Tribunais" },
   { to: "/ia", icon: "🤖", label: "IA Preditiva" },
   { to: "/financeiro", icon: "💰", label: "Financeiro" },
+  { to: "/financeiro/cobranca", icon: "🧾", label: "Cobrança & Time" },
 ];
 
 function getIsMobile() {

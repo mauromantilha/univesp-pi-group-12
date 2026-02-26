@@ -13,6 +13,7 @@ import IAPreditiva from "./pages/IAPreditiva";
 import DashboardFinanceiro from "./pages/DashboardFinanceiro";
 import Lancamentos from "./pages/Lancamentos";
 import ContasExtrato from "./pages/ContasExtrato";
+import FinanceiroCobranca from "./pages/FinanceiroCobranca";
 import ConsultaTribunais from "./pages/ConsultaTribunais";
 import GestaoUsuarios from "./pages/GestaoUsuarios";
 import Documentos from "./pages/Documentos";
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="financeiro" element={<DashboardFinanceiro />} />
           <Route path="financeiro/lancamentos" element={<Lancamentos />} />
           <Route path="financeiro/contas" element={<ContasExtrato />} />
+          <Route path="financeiro/cobranca" element={<FinanceiroCobranca />} />
           <Route path="gestao-usuarios" element={<GestaoUsuarios />} />
         </Route>
         <Route path="*" element={<AppFallbackRoute />} />
