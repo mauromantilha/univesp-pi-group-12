@@ -19,12 +19,18 @@ import GestaoUsuarios from "./pages/GestaoUsuarios";
 import Documentos from "./pages/Documentos";
 
 function PrivateRoute({ children }) {
-  const { token } = useAuth();
+  const { token, loading } = useAuth();
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-gray-400">Carregando sessão...</div>;
+  }
   return token ? children : <Navigate to="/login" replace />;
 }
 
 function AppFallbackRoute() {
-  const { token } = useAuth();
+  const { token, loading } = useAuth();
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-gray-400">Carregando sessão...</div>;
+  }
   return <Navigate to={token ? "/dashboard" : "/login"} replace />;
 }
 

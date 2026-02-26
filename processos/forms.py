@@ -1,5 +1,6 @@
 from django import forms
 from .models import Cliente, Processo, ProcessoArquivo, Movimentacao, Comarca, Vara, TipoProcesso
+from core.security import validate_upload_file
 
 WIDGET_ATTRS = {'class': 'form-control'}
 SELECT_ATTRS = {'class': 'form-select'}
@@ -17,8 +18,9 @@ class MultiFileField(forms.FileField):
         if data in self.empty_values:
             return []
         if isinstance(data, (list, tuple)):
-            return [single_clean(item, initial) for item in data]
-        return [single_clean(data, initial)]
+            arquivos = [single_clean(item, initial) for item in data]
+            return [validate_upload_file(arq) for arq in arquivos]
+        return [validate_upload_file(single_clean(data, initial))]
 
 
 class ClienteForm(forms.ModelForm):

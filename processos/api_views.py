@@ -1,13 +1,14 @@
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework import status
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from django.db.models import Q, Max
 from django.utils import timezone
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
 from agenda.models import Compromisso
 from agenda.serializers import CompromissoSerializer
+from core.security import validate_upload_file
 from .models import (
     Comarca,
     Vara,
@@ -100,13 +101,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         if self.request.user.is_administrador():
-            processo = serializer.save()
-            if processo.advogado_id:
-                ProcessoResponsavel.objects.get_or_create(
-                    processo=processo,
-                    usuario_id=processo.advogado_id,
-                    defaults={'papel': 'principal', 'ativo': True},
-                )
+            serializer.save()
             return
         responsavel = serializer.validated_data.get('responsavel')
         lead_responsavel = serializer.validated_data.get('lead_responsavel')
@@ -114,8 +109,8 @@ class ClienteViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Você não pode transferir responsável deste cliente.')
         if lead_responsavel and lead_responsavel.pk not in {self.request.user.pk, serializer.instance.lead_responsavel_id}:
             raise PermissionDenied('Você não pode transferir responsável do lead deste cliente.')
-        responsavel_final = serializer.instance.responsavel or self.request.user
-        lead_responsavel_final = serializer.instance.lead_responsavel or self.request.user
+        responsavel_final = responsavel or serializer.instance.responsavel or self.request.user
+        lead_responsavel_final = lead_responsavel or serializer.instance.lead_responsavel or self.request.user
         serializer.save(
             responsavel=responsavel_final,
             lead_responsavel=lead_responsavel_final,
@@ -175,6 +170,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
         descricao = request.data.get('descricao')
 
         for arquivo in arquivos:
+            validate_upload_file(arquivo)
             referencia = documento_referencia or arquivo.name
             ultimo = (
                 cliente.arquivos.filter(documento_referencia=referencia)
@@ -465,6 +461,10 @@ class ProcessoViewSet(viewsets.ModelViewSet):
         serializer.save(advogado=self.request.user)
 
     def _alterar_status(self, processo, novo_status):
+        if not processo.pode_transicionar(novo_status):
+            raise ValidationError(
+                {'status': f'Transição de status inválida: {processo.status} -> {novo_status}.'}
+            )
         processo.status = novo_status
         processo.save(update_fields=['status', 'atualizado_em'])
 
@@ -764,6 +764,7 @@ class ProcessoViewSet(viewsets.ModelViewSet):
         descricao = request.data.get('descricao')
 
         for arquivo in arquivos:
+            validate_upload_file(arquivo)
             referencia = documento_referencia or arquivo.name
             ultimo = (
                 processo.arquivos.filter(documento_referencia=referencia)

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import toast from "react-hot-toast";
+import useDebouncedValue from "../hooks/useDebouncedValue";
 
 const STATUS_LABELS = {
   em_andamento: "Em Andamento",
@@ -51,6 +52,7 @@ export default function Processos() {
   const [processos, setProcessos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 350);
   const [filterStatus, setFilterStatus] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [clientes, setClientes] = useState([]);
@@ -62,7 +64,7 @@ export default function Processos() {
   const fetchProcessos = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (search.trim()) params.set("search", search.trim());
+    if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
     if (filterStatus) params.set("status", filterStatus);
     params.set("limit", "200");
 
@@ -71,7 +73,7 @@ export default function Processos() {
       .then((r) => setProcessos(toList(r.data)))
       .catch(() => toast.error("Erro ao carregar processos"))
       .finally(() => setLoading(false));
-  }, [search, filterStatus]);
+  }, [debouncedSearch, filterStatus]);
 
   useEffect(() => {
     fetchProcessos();

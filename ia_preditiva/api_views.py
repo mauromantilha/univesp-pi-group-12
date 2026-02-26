@@ -3,6 +3,7 @@ import os
 import re
 from datetime import timedelta
 
+from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -15,13 +16,18 @@ from rest_framework.throttling import UserRateThrottle
 from agenda.models import Compromisso
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
 from consulta_tribunais.models import ConsultaProcesso
-from consulta_tribunais.services.groq_service import GroqService
 from financeiro.models import Lancamento
 from jurisprudencia.models import Documento
 from processos.models import Cliente, Processo
 
 from .models import AnaliseRisco, IAEventoSistema
 from .serializers import AnaliseRiscoSerializer, IAEventoSistemaSerializer
+from .tasks import gerar_resposta_ia
+
+try:
+    from celery.exceptions import TimeoutError as CeleryTimeoutError
+except Exception:  # pragma: no cover - fallback quando Celery não está instalado
+    CeleryTimeoutError = TimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +41,25 @@ def _resposta_fallback_ia():
         'IA indisponível no momento. Verifique a configuração da chave GROQ_API_KEY '
         'ou tente novamente em instantes.'
     )
+
+
+def _gerar_resposta_ia(messages, temperature=0.2, max_tokens=1200):
+    groq_api_key = os.getenv('GROQ_API_KEY')
+    if not groq_api_key:
+        return ''
+
+    timeout = int(getattr(settings, 'IA_CELERY_RESULT_TIMEOUT', 20))
+    use_celery = bool(getattr(settings, 'IA_USE_CELERY', False))
+
+    if use_celery:
+        try:
+            return gerar_resposta_ia.delay(messages, temperature=temperature, max_tokens=max_tokens).get(timeout=timeout) or ''
+        except CeleryTimeoutError:
+            logger.warning('Timeout ao aguardar task Celery de IA; fallback síncrono.')
+        except Exception:
+            logger.exception('Falha ao executar task Celery de IA; fallback síncrono.')
+
+    return gerar_resposta_ia.run(messages, temperature=temperature, max_tokens=max_tokens) or ''
 
 
 def _safe_int(value):
@@ -283,14 +308,13 @@ def ia_chat(request):
                 mensagens.append({'role': role, 'content': content})
         mensagens.append({'role': 'user', 'content': mensagem})
 
-        groq = GroqService(groq_api_key)
-        completion = groq.client.chat.completions.create(
-            messages=mensagens,
-            model=groq.model,
+        resposta = _gerar_resposta_ia(
+            mensagens,
             temperature=0.25,
             max_tokens=1700,
         )
-        resposta = completion.choices[0].message.content
+        if not resposta:
+            raise RuntimeError('Resposta vazia da IA')
         return Response({'resposta': resposta})
     except Exception:
         logger.exception('Falha na integração com IA no endpoint ia_chat')
@@ -510,9 +534,8 @@ class AnaliseRiscoViewSet(viewsets.ReadOnlyModelViewSet):
                     f'Similares internos: {total_similares}; vitórias: {vitorias}. '\
                     'Retorne resumo objetivo em português com riscos e próximos passos.'
                 )
-                groq = GroqService(groq_api_key)
-                completion = groq.client.chat.completions.create(
-                    messages=[
+                resposta = _gerar_resposta_ia(
+                    [
                         {
                             'role': 'system',
                             'content': (
@@ -522,11 +545,10 @@ class AnaliseRiscoViewSet(viewsets.ReadOnlyModelViewSet):
                         },
                         {'role': 'user', 'content': prompt},
                     ],
-                    model=groq.model,
                     temperature=0.2,
                     max_tokens=900,
                 )
-                justificativa = completion.choices[0].message.content or justificativa
+                justificativa = resposta or justificativa
             except Exception:
                 logger.exception('Falha em resumo IA para analisar_processo')
 
@@ -752,20 +774,20 @@ class AnaliseRiscoViewSet(viewsets.ReadOnlyModelViewSet):
                     f'Pedidos:\n{pedidos_txt or "- conforme contexto"}\n'
                     'Estruture em Fatos, Direito, Pedidos e Requerimentos Finais.'
                 )
-                groq = GroqService(groq_api_key)
-                completion = groq.client.chat.completions.create(
-                    messages=[
-                        {
-                            'role': 'system',
-                            'content': 'Você é um redator jurídico brasileiro especializado em peças processuais.',
-                        },
-                        {'role': 'user', 'content': prompt},
-                    ],
-                    model=groq.model,
-                    temperature=0.2,
-                    max_tokens=1800,
-                )
-                texto_ia = (completion.choices[0].message.content or '').strip()
+                texto_ia = (
+                    _gerar_resposta_ia(
+                        [
+                            {
+                                'role': 'system',
+                                'content': 'Você é um redator jurídico brasileiro especializado em peças processuais.',
+                            },
+                            {'role': 'user', 'content': prompt},
+                        ],
+                        temperature=0.2,
+                        max_tokens=1800,
+                    )
+                    or ''
+                ).strip()
                 if texto_ia:
                     texto = texto_ia
             except Exception:
@@ -804,20 +826,17 @@ class AnaliseRiscoViewSet(viewsets.ReadOnlyModelViewSet):
                     '1) gramática, 2) lógica jurídica, 3) riscos de indeferimento, 4) melhorias de redação.\n\n'
                     f'TEXTO:\n{texto[:6000]}'
                 )
-                groq = GroqService(groq_api_key)
-                completion = groq.client.chat.completions.create(
-                    messages=[
+                comentario_ia = _gerar_resposta_ia(
+                    [
                         {
                             'role': 'system',
                             'content': 'Você é revisor jurídico técnico e objetivo. Responda em português.',
                         },
                         {'role': 'user', 'content': prompt},
                     ],
-                    model=groq.model,
                     temperature=0.15,
                     max_tokens=1200,
-                )
-                comentario_ia = completion.choices[0].message.content or ''
+                ) or ''
             except Exception:
                 logger.exception('Falha em revisar_peca com IA')
 

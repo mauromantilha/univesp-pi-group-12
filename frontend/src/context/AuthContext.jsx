@@ -4,39 +4,50 @@ import api from "../api/axios";
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem("access_token"));
+  const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (token) fetchMe();
-  }, [token]);
+    fetchMe().finally(() => setLoading(false));
+  }, []);
 
   async function fetchMe() {
     try {
       const res = await api.get("/usuarios/me/");
       setUser(res.data);
+      setToken("authenticated");
+      return true;
     } catch {
       setUser(null);
+      setToken(null);
+      return false;
     }
   }
 
   async function login(username, password) {
     const res = await api.post("/auth/login/", { username, password });
-    localStorage.setItem("access_token", res.data.access);
-    localStorage.setItem("refresh_token", res.data.refresh);
-    setToken(res.data.access);
+    if (res.data?.user) {
+      setUser(res.data.user);
+      setToken("authenticated");
+    } else {
+      await fetchMe();
+    }
     return res.data;
   }
 
-  function logout() {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
+  async function logout() {
+    try {
+      await api.post("/auth/logout/", {});
+    } catch {
+      // ignora erro de logout remoto
+    }
     setToken(null);
     setUser(null);
   }
 
   return (
-    <AuthContext.Provider value={{ token, user, login, logout }}>
+    <AuthContext.Provider value={{ token, user, loading, login, logout, fetchMe }}>
       {children}
     </AuthContext.Provider>
   );

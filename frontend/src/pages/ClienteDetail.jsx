@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../api/axios";
 import toast from "react-hot-toast";
+import { validateSelectedFiles } from "../utils/uploadValidation";
 
 const LEAD_ETAPAS = [
   { value: "novo", label: "Novo" },
@@ -826,7 +827,16 @@ export default function ClienteDetail() {
           </div>
           <div className="md:col-span-1">
             <label className="label">Arquivo</label>
-            <input type="file" className="input" onChange={(e) => setContratoForm((f) => ({ ...f, arquivo: e.target.files?.[0] || null }))} />
+            <input
+              type="file"
+              className="input"
+              onChange={(e) => {
+                const selecionados = Array.from(e.target.files || []);
+                const { valid, errors } = validateSelectedFiles(selecionados);
+                errors.forEach((msg) => toast.error(msg));
+                setContratoForm((f) => ({ ...f, arquivo: valid[0] || null }));
+              }}
+            />
           </div>
           <div className="md:col-span-4">
             <label className="label">Link de assinatura (opcional)</label>

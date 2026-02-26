@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import toast from "react-hot-toast";
+import useDebouncedValue from "../hooks/useDebouncedValue";
 
 const EMPTY_FORM = {
   nome: "",
@@ -34,6 +35,7 @@ export default function Clientes() {
   const [tiposProcesso, setTiposProcesso] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 350);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -42,7 +44,7 @@ export default function Clientes() {
   const fetchClientes = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (search.trim()) params.set("search", search.trim());
+    if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
     params.set("limit", "200");
 
     api
@@ -50,7 +52,7 @@ export default function Clientes() {
       .then((r) => setClientes(toList(r.data)))
       .catch(() => toast.error("Erro ao carregar clientes"))
       .finally(() => setLoading(false));
-  }, [search]);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     fetchClientes();

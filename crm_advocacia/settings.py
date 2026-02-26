@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     # Third party
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     # CRM modules
     'accounts',
@@ -220,7 +221,7 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 # REST Framework Configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'accounts.jwt_auth.CookieJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -248,11 +249,49 @@ REST_FRAMEWORK = {
 
 # JWT Configuration
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=12),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=45),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': False,
+    'BLACKLIST_AFTER_ROTATION': True,
 }
+
+JWT_ACCESS_COOKIE_NAME = 'access_token'
+JWT_REFRESH_COOKIE_NAME = 'refresh_token'
+JWT_COOKIE_SECURE = _env_bool('JWT_COOKIE_SECURE', not DEBUG)
+JWT_COOKIE_SAMESITE = os.environ.get('JWT_COOKIE_SAMESITE', 'Lax')
+
+MAX_UPLOAD_FILE_BYTES = int(os.environ.get('MAX_UPLOAD_FILE_BYTES', str(10 * 1024 * 1024)))
+ALLOWED_UPLOAD_EXTENSIONS = [
+    ext.strip().lower()
+    for ext in os.environ.get(
+        'ALLOWED_UPLOAD_EXTENSIONS',
+        '.pdf,.doc,.docx,.txt,.rtf,.png,.jpg,.jpeg,.csv,.xls,.xlsx',
+    ).split(',')
+    if ext.strip()
+]
+ALLOWED_UPLOAD_MIME_TYPES = [
+    mime.strip().lower()
+    for mime in os.environ.get(
+        'ALLOWED_UPLOAD_MIME_TYPES',
+        (
+            'application/pdf,application/msword,'
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document,'
+            'text/plain,application/rtf,text/rtf,image/png,image/jpeg,text/csv,'
+            'application/vnd.ms-excel,'
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        ),
+    ).split(',')
+    if mime.strip()
+]
+
+IA_USE_CELERY = _env_bool('IA_USE_CELERY', False)
+IA_CELERY_RESULT_TIMEOUT = int(os.environ.get('IA_CELERY_RESULT_TIMEOUT', '20'))
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', CELERY_BROKER_URL)
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
 
 # CORS Configuration
 CORS_ALLOWED_ORIGINS = [
@@ -263,9 +302,19 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '31536000'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+SECURE_SSL_REDIRECT = _env_bool('SECURE_SSL_REDIRECT', False)
+
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_BROWSER_XSS_FILTER = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

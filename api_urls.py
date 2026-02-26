@@ -1,8 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView
 
-from accounts.auth_views import login_view
+from accounts.auth_views import login_view, refresh_view, logout_view
 from accounts.api_views import UsuarioViewSet
 from processos.api_views import (
     ComarcaViewSet, VaraViewSet, TipoProcessoViewSet,
@@ -55,7 +54,8 @@ router.register(r'financeiro/faturas', FaturaViewSet, basename='fatura')
 urlpatterns = [
     # Auth endpoints
     path('auth/login/', login_view, name='api-login'),
-    path('auth/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
+    path('auth/refresh/', refresh_view, name='token-refresh'),
+    path('auth/logout/', logout_view, name='api-logout'),
 
     # IA Chat
     path('ia/chat/', ia_chat, name='ia-chat'),

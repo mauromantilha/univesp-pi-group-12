@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.core.exceptions import ValidationError
 
 
 class Comarca(models.Model):
@@ -307,6 +308,12 @@ class Processo(models.Model):
         ('monitoramento', 'Monitoramento'),
         ('encerramento', 'Encerramento'),
     ]
+    STATUS_TRANSITIONS = {
+        'em_andamento': {'suspenso', 'finalizado', 'arquivado'},
+        'suspenso': {'em_andamento', 'finalizado', 'arquivado'},
+        'finalizado': {'arquivado'},
+        'arquivado': set(),
+    }
     numero = models.CharField(max_length=30, unique=True, verbose_name='Número do Processo')
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name='processos', verbose_name='Cliente')
     advogado = models.ForeignKey(
@@ -344,6 +351,17 @@ class Processo(models.Model):
 
     def __str__(self):
         return f'{self.numero} - {self.cliente}'
+
+    def pode_transicionar(self, novo_status):
+        if novo_status == self.status:
+            return True
+        return novo_status in self.STATUS_TRANSITIONS.get(self.status, set())
+
+    def validar_transicao_status(self, novo_status):
+        if not self.pode_transicionar(novo_status):
+            raise ValidationError(
+                f'Transição de status inválida: {self.status} -> {novo_status}.'
+            )
 
 
 class ProcessoParte(models.Model):

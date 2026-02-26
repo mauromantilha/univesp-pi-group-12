@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from rest_framework import serializers
+from core.security import decrypt_pii, encrypt_pii, validate_upload_file
 
 from .models import (
     Lancamento,
@@ -32,6 +33,18 @@ class ContaBancariaSerializer(serializers.ModelSerializer):
 
     def get_saldo(self, obj):
         return float(obj.saldo or 0)
+
+    def validate_agencia(self, value):
+        return encrypt_pii(value)
+
+    def validate_conta_numero(self, value):
+        return encrypt_pii(value)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['agencia'] = decrypt_pii(data.get('agencia'))
+        data['conta_numero'] = decrypt_pii(data.get('conta_numero'))
+        return data
 
 
 class LancamentoSerializer(serializers.ModelSerializer):
@@ -280,3 +293,6 @@ class LancamentoArquivoSerializer(serializers.ModelSerializer):
         if request:
             return request.build_absolute_uri(obj.arquivo.url)
         return obj.arquivo.url
+
+    def validate_arquivo(self, value):
+        return validate_upload_file(value)

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../api/axios";
 import toast from "react-hot-toast";
+import { validateSelectedFiles } from "../utils/uploadValidation";
 
 function toList(payload) {
   if (Array.isArray(payload)) return payload;
@@ -42,6 +43,8 @@ function PreviewPanel({ preview }) {
             title="visualizacao-documento"
             src={preview.url}
             className="w-full h-[430px] rounded-lg border border-gray-200 bg-white"
+            sandbox="allow-same-origin"
+            referrerPolicy="no-referrer"
           />
           <p className="text-[11px] text-gray-400 mt-2">
             Visualização embutida. O sistema não exibe botão de download nesta tela.
@@ -234,7 +237,12 @@ function ClienteDocs({ setPreview }) {
           type="file"
           multiple
           className="input"
-          onChange={(e) => setArquivos(Array.from(e.target.files || []))}
+          onChange={(e) => {
+            const selecionados = Array.from(e.target.files || []);
+            const { valid, errors } = validateSelectedFiles(selecionados);
+            errors.forEach((msg) => toast.error(msg));
+            setArquivos(valid);
+          }}
         />
         <p className="text-xs text-gray-500 mt-1">{arquivos.length} arquivo(s) selecionado(s)</p>
       </div>
@@ -463,7 +471,12 @@ function ProcessoDocs({ setPreview }) {
           type="file"
           multiple
           className="input"
-          onChange={(e) => setArquivos(Array.from(e.target.files || []))}
+          onChange={(e) => {
+            const selecionados = Array.from(e.target.files || []);
+            const { valid, errors } = validateSelectedFiles(selecionados);
+            errors.forEach((msg) => toast.error(msg));
+            setArquivos(valid);
+          }}
         />
         <p className="text-xs text-gray-500 mt-1">{arquivos.length} arquivo(s) selecionado(s)</p>
       </div>

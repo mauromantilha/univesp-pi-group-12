@@ -9,6 +9,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
+from core.security import validate_upload_file
 from .models import (
     Lancamento,
     CategoriaFinanceira,
@@ -269,21 +270,16 @@ class LancamentoViewSet(viewsets.ModelViewSet):
         hoje = timezone.now().date()
         qs = self.get_queryset()
 
-        ids_atrasados = list(qs.filter(status='pendente', data_vencimento__lt=hoje).values_list('id', flat=True))
-        if ids_atrasados:
-            Lancamento.objects.filter(id__in=ids_atrasados).update(status='atrasado')
-            qs = self.get_queryset()
-
         inicio_mes = hoje.replace(day=1)
         inicio_proximo_mes = _add_months(inicio_mes, 1)
 
         totais = qs.aggregate(
             total_pendente=Sum('valor', filter=Q(status='pendente')),
             total_pago=Sum('valor', filter=Q(status='pago')),
-            total_atrasado=Sum('valor', filter=Q(status='atrasado')),
+            total_atrasado=Sum('valor', filter=Q(status='atrasado') | Q(status='pendente', data_vencimento__lt=hoje)),
             qtd_pendente=Count('id', filter=Q(status='pendente')),
             qtd_pago=Count('id', filter=Q(status='pago')),
-            qtd_atrasado=Count('id', filter=Q(status='atrasado')),
+            qtd_atrasado=Count('id', filter=Q(status='atrasado') | Q(status='pendente', data_vencimento__lt=hoje)),
         )
 
         proximos = qs.filter(
@@ -292,7 +288,7 @@ class LancamentoViewSet(viewsets.ModelViewSet):
             data_vencimento__lte=hoje + timedelta(days=7),
         ).order_by('data_vencimento')[:5]
 
-        atrasados = qs.filter(status='atrasado').order_by('data_vencimento')[:5]
+        atrasados = qs.filter(Q(status='atrasado') | Q(status='pendente', data_vencimento__lt=hoje)).order_by('data_vencimento')[:5]
         recentes = qs.filter(status='pago').order_by('-data_pagamento')[:5]
 
         a_receber_mes = qs.filter(
@@ -323,8 +319,10 @@ class LancamentoViewSet(viewsets.ModelViewSet):
             data_pagamento__lt=inicio_proximo_mes,
         ).aggregate(total=Sum('valor'))['total'] or 0
 
-        atrasados_valor = qs.filter(status='atrasado').aggregate(total=Sum('valor'))['total'] or 0
-        atrasados_count = qs.filter(status='atrasado').count()
+        atrasados_valor = qs.filter(
+            Q(status='atrasado') | Q(status='pendente', data_vencimento__lt=hoje)
+        ).aggregate(total=Sum('valor'))['total'] or 0
+        atrasados_count = qs.filter(Q(status='atrasado') | Q(status='pendente', data_vencimento__lt=hoje)).count()
 
         contas_qs = ContaBancaria.objects.all()
         if not request.user.is_administrador():
@@ -424,6 +422,7 @@ class LancamentoViewSet(viewsets.ModelViewSet):
 
         criados = []
         for arquivo in arquivos:
+            validate_upload_file(arquivo)
             criados.append(
                 LancamentoArquivo.objects.create(
                     lancamento=lancamento,

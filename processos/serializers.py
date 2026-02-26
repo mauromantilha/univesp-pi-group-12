@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from core.security import decrypt_pii, encrypt_pii, validate_upload_file
 from .models import (
     Comarca,
     Vara,
@@ -86,6 +87,14 @@ class ClienteSerializer(serializers.ModelSerializer):
 
     def get_processos_possiveis_nomes(self, obj):
         return [tipo.nome for tipo in obj.processos_possiveis.all()]
+
+    def validate_cpf_cnpj(self, value):
+        return encrypt_pii(value)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['cpf_cnpj'] = decrypt_pii(data.get('cpf_cnpj'))
+        return data
 
 
 class ClienteAutomacaoSerializer(serializers.ModelSerializer):
@@ -175,6 +184,9 @@ class ClienteContratoSerializer(serializers.ModelSerializer):
         if request:
             return request.build_absolute_uri(obj.arquivo.url)
         return obj.arquivo.url
+
+    def validate_arquivo(self, value):
+        return validate_upload_file(value)
 
 
 class ProcessoParteSerializer(serializers.ModelSerializer):
@@ -300,6 +312,9 @@ class ClienteArquivoSerializer(serializers.ModelSerializer):
             return obj.template.nome
         return obj.template_nome
 
+    def validate_arquivo(self, value):
+        return validate_upload_file(value)
+
 
 class MovimentacaoSerializer(serializers.ModelSerializer):
     autor_nome = serializers.CharField(source='autor.get_full_name', read_only=True)
@@ -330,6 +345,16 @@ class ProcessoSerializer(serializers.ModelSerializer):
                   'objeto', 'valor_causa',
                   'criado_em', 'atualizado_em',
                   'movimentacoes']
+
+    def validate(self, attrs):
+        instance = getattr(self, 'instance', None)
+        novo_status = attrs.get('status')
+        if instance and novo_status and novo_status != instance.status:
+            if not instance.pode_transicionar(novo_status):
+                raise serializers.ValidationError({
+                    'status': f'Transição de status inválida: {instance.status} -> {novo_status}.'
+                })
+        return attrs
 
 
 class ProcessoArquivoSerializer(serializers.ModelSerializer):
@@ -370,6 +395,9 @@ class ProcessoArquivoSerializer(serializers.ModelSerializer):
         if obj.template:
             return obj.template.nome
         return obj.template_nome
+
+    def validate_arquivo(self, value):
+        return validate_upload_file(value)
 
 
 class ProcessoPecaSerializer(serializers.ModelSerializer):
