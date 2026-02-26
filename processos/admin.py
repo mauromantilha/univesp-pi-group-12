@@ -1,12 +1,24 @@
 from django.contrib import admin
-from .models import Cliente, Processo, ProcessoArquivo, ClienteArquivo, Movimentacao, Comarca, Vara, TipoProcesso
+from .models import (
+    Cliente,
+    ClienteAutomacao,
+    ClienteTarefa,
+    ClienteContrato,
+    Processo,
+    ProcessoArquivo,
+    ClienteArquivo,
+    Movimentacao,
+    Comarca,
+    Vara,
+    TipoProcesso,
+)
 
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'tipo', 'responsavel', 'cpf_cnpj', 'email', 'telefone')
-    search_fields = ('nome', 'cpf_cnpj', 'email', 'demanda')
-    list_filter = ('tipo', 'responsavel')
+    list_display = ('nome', 'tipo', 'lead_etapa', 'qualificacao_score', 'conflito_interesses_status', 'responsavel', 'cpf_cnpj')
+    search_fields = ('nome', 'cpf_cnpj', 'email', 'demanda', 'lead_origem', 'lead_campanha')
+    list_filter = ('tipo', 'lead_etapa', 'qualificacao_status', 'conflito_interesses_status', 'responsavel')
 
 
 @admin.register(Processo)
@@ -34,6 +46,27 @@ class ClienteArquivoAdmin(admin.ModelAdmin):
     list_display = ('nome_original', 'cliente', 'enviado_por', 'criado_em')
     list_filter = ('criado_em',)
     search_fields = ('nome_original', 'cliente__nome')
+
+
+@admin.register(ClienteAutomacao)
+class ClienteAutomacaoAdmin(admin.ModelAdmin):
+    list_display = ('cliente', 'canal', 'tipo', 'status', 'agendado_em', 'enviado_em', 'criado_em')
+    list_filter = ('canal', 'tipo', 'status')
+    search_fields = ('cliente__nome', 'mensagem')
+
+
+@admin.register(ClienteTarefa)
+class ClienteTarefaAdmin(admin.ModelAdmin):
+    list_display = ('cliente', 'titulo', 'status', 'prioridade', 'prazo_em', 'responsavel')
+    list_filter = ('status', 'prioridade')
+    search_fields = ('cliente__nome', 'titulo', 'descricao')
+
+
+@admin.register(ClienteContrato)
+class ClienteContratoAdmin(admin.ModelAdmin):
+    list_display = ('cliente', 'titulo', 'tipo_documento', 'status_assinatura', 'assinatura_provedor', 'assinado_em')
+    list_filter = ('tipo_documento', 'status_assinatura')
+    search_fields = ('cliente__nome', 'titulo', 'assinatura_envelope_id')
 
 
 admin.site.register(Comarca)

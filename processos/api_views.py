@@ -4,12 +4,16 @@ from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from django.db.models import Q
+from django.utils import timezone
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
 from .models import (
     Comarca,
     Vara,
     TipoProcesso,
     Cliente,
+    ClienteAutomacao,
+    ClienteTarefa,
+    ClienteContrato,
     Processo,
     Movimentacao,
     ClienteArquivo,
@@ -18,7 +22,8 @@ from .models import (
 from .serializers import (
     ComarcaSerializer, VaraSerializer, TipoProcessoSerializer,
     ClienteSerializer, ProcessoSerializer, ProcessoListSerializer,
-    MovimentacaoSerializer, ClienteArquivoSerializer, ProcessoArquivoSerializer
+    MovimentacaoSerializer, ClienteArquivoSerializer, ProcessoArquivoSerializer,
+    ClienteAutomacaoSerializer, ClienteTarefaSerializer, ClienteContratoSerializer,
 )
 
 
@@ -51,8 +56,8 @@ class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.all()
     serializer_class = ClienteSerializer
     permission_classes = [IsAdvogadoOuAdministradorWrite]
-    search_fields = ['nome', 'cpf_cnpj', 'email', 'demanda']
-    ordering_fields = ['nome', 'tipo']
+    search_fields = ['nome', 'cpf_cnpj', 'email', 'demanda', 'lead_origem', 'lead_campanha']
+    ordering_fields = ['nome', 'tipo', 'lead_etapa', 'lead_sla_resposta_em', 'qualificacao_score']
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -81,10 +86,17 @@ class ClienteViewSet(viewsets.ModelViewSet):
             serializer.save()
             return
         responsavel = serializer.validated_data.get('responsavel')
+        lead_responsavel = serializer.validated_data.get('lead_responsavel')
         if responsavel and responsavel.pk not in {self.request.user.pk, serializer.instance.responsavel_id}:
             raise PermissionDenied('Você não pode transferir responsável deste cliente.')
+        if lead_responsavel and lead_responsavel.pk not in {self.request.user.pk, serializer.instance.lead_responsavel_id}:
+            raise PermissionDenied('Você não pode transferir responsável do lead deste cliente.')
         responsavel_final = serializer.instance.responsavel or self.request.user
-        serializer.save(responsavel=responsavel_final)
+        lead_responsavel_final = serializer.instance.lead_responsavel or self.request.user
+        serializer.save(
+            responsavel=responsavel_final,
+            lead_responsavel=lead_responsavel_final,
+        )
 
     @action(detail=True, methods=['post'])
     def inativar(self, request, pk=None):
@@ -125,6 +137,157 @@ class ClienteViewSet(viewsets.ModelViewSet):
             )
         serializer = ClienteArquivoSerializer(criados, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get', 'patch'], url_path='pipeline')
+    def pipeline(self, request, pk=None):
+        cliente = self.get_object()
+        if request.method == 'GET':
+            return Response({
+                'lead_origem': cliente.lead_origem,
+                'lead_campanha': cliente.lead_campanha,
+                'lead_etapa': cliente.lead_etapa,
+                'lead_sla_resposta_em': cliente.lead_sla_resposta_em,
+                'lead_ultimo_contato_em': cliente.lead_ultimo_contato_em,
+                'lead_responsavel': cliente.lead_responsavel_id,
+            })
+
+        campos = [
+            'lead_origem',
+            'lead_campanha',
+            'lead_etapa',
+            'lead_sla_resposta_em',
+            'lead_ultimo_contato_em',
+            'lead_responsavel',
+        ]
+        data = {k: request.data.get(k) for k in campos if k in request.data}
+        serializer = self.get_serializer(cliente, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'patch'], url_path='qualificacao')
+    def qualificacao(self, request, pk=None):
+        cliente = self.get_object()
+        if request.method == 'GET':
+            return Response({
+                'formulario_qualificacao': cliente.formulario_qualificacao,
+                'qualificacao_status': cliente.qualificacao_status,
+                'qualificacao_score': cliente.qualificacao_score,
+            })
+
+        campos = ['formulario_qualificacao', 'qualificacao_status', 'qualificacao_score']
+        data = {k: request.data.get(k) for k in campos if k in request.data}
+        serializer = self.get_serializer(cliente, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'patch'], url_path='conflito-interesses')
+    def conflito_interesses(self, request, pk=None):
+        cliente = self.get_object()
+        if request.method == 'GET':
+            return Response({
+                'conflito_interesses_status': cliente.conflito_interesses_status,
+                'conflito_interesses_observacoes': cliente.conflito_interesses_observacoes,
+            })
+
+        campos = ['conflito_interesses_status', 'conflito_interesses_observacoes']
+        data = {k: request.data.get(k) for k in campos if k in request.data}
+        serializer = self.get_serializer(cliente, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'post'], url_path='automacoes')
+    def automacoes(self, request, pk=None):
+        cliente = self.get_object()
+        if request.method == 'GET':
+            qs = cliente.automacoes.select_related('criado_por').all()
+            serializer = ClienteAutomacaoSerializer(qs, many=True)
+            return Response(serializer.data)
+
+        payload = {**request.data, 'cliente': cliente.id}
+        serializer = ClienteAutomacaoSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(criado_por=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get', 'post'], url_path='tarefas')
+    def tarefas(self, request, pk=None):
+        cliente = self.get_object()
+        if request.method == 'GET':
+            qs = cliente.tarefas.select_related('responsavel', 'criado_por').all()
+            serializer = ClienteTarefaSerializer(qs, many=True)
+            return Response(serializer.data)
+
+        payload = {**request.data, 'cliente': cliente.id}
+        serializer = ClienteTarefaSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(criado_por=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path=r'tarefas/(?P<tarefa_id>[^/.]+)/concluir')
+    def concluir_tarefa(self, request, pk=None, tarefa_id=None):
+        cliente = self.get_object()
+        try:
+            tarefa = cliente.tarefas.get(pk=tarefa_id)
+        except ClienteTarefa.DoesNotExist:
+            return Response({'detail': 'Tarefa não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        tarefa.status = 'concluida'
+        tarefa.save(update_fields=['status', 'atualizado_em'])
+        serializer = ClienteTarefaSerializer(tarefa)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'post'], url_path='contratos')
+    def contratos(self, request, pk=None):
+        cliente = self.get_object()
+        if request.method == 'GET':
+            qs = cliente.contratos.select_related('criado_por').all()
+            serializer = ClienteContratoSerializer(qs, many=True, context={'request': request})
+            return Response(serializer.data)
+
+        payload = request.data.copy()
+        payload['cliente'] = cliente.id
+        serializer = ClienteContratoSerializer(data=payload, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save(criado_por=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path=r'contratos/(?P<contrato_id>[^/.]+)/enviar-assinatura')
+    def enviar_assinatura(self, request, pk=None, contrato_id=None):
+        cliente = self.get_object()
+        try:
+            contrato = cliente.contratos.get(pk=contrato_id)
+        except ClienteContrato.DoesNotExist:
+            return Response({'detail': 'Contrato não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        contrato.status_assinatura = 'enviado'
+        if request.data.get('assinatura_provedor'):
+            contrato.assinatura_provedor = request.data.get('assinatura_provedor')
+        if request.data.get('assinatura_envelope_id'):
+            contrato.assinatura_envelope_id = request.data.get('assinatura_envelope_id')
+        if request.data.get('assinatura_link'):
+            contrato.assinatura_link = request.data.get('assinatura_link')
+        contrato.save(
+            update_fields=['status_assinatura', 'assinatura_provedor', 'assinatura_envelope_id', 'assinatura_link']
+        )
+        serializer = ClienteContratoSerializer(contrato, context={'request': request})
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path=r'contratos/(?P<contrato_id>[^/.]+)/marcar-assinado')
+    def marcar_assinado(self, request, pk=None, contrato_id=None):
+        cliente = self.get_object()
+        try:
+            contrato = cliente.contratos.get(pk=contrato_id)
+        except ClienteContrato.DoesNotExist:
+            return Response({'detail': 'Contrato não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        contrato.status_assinatura = 'assinado'
+        contrato.assinado_em = timezone.now()
+        contrato.save(update_fields=['status_assinatura', 'assinado_em'])
+        serializer = ClienteContratoSerializer(contrato, context={'request': request})
+        return Response(serializer.data)
 
 
 class ProcessoViewSet(viewsets.ModelViewSet):

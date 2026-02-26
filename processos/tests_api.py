@@ -170,3 +170,110 @@ class ProcessosApiPermissoesTest(APITestCase):
         resultados = response.data['results']
         self.assertEqual(len(resultados), 1)
         self.assertEqual(resultados[0]['id'], self.processo_compartilhado.pk)
+
+    def test_fluxo_pipeline_qualificacao_conflito_cliente(self):
+        self.client.force_authenticate(user=self.adv1)
+
+        response_pipeline = self.client.patch(
+            reverse('cliente-pipeline', args=[self.cliente_adv1.pk]),
+            {
+                'lead_origem': 'Instagram',
+                'lead_campanha': 'Campanha Março',
+                'lead_etapa': 'qualificacao',
+                'lead_responsavel': self.adv1.pk,
+            },
+            format='json',
+        )
+        self.assertEqual(response_pipeline.status_code, status.HTTP_200_OK)
+
+        response_qualificacao = self.client.patch(
+            reverse('cliente-qualificacao', args=[self.cliente_adv1.pk]),
+            {
+                'qualificacao_status': 'qualificado',
+                'qualificacao_score': 82,
+                'formulario_qualificacao': {'urgencia': 'alta', 'orcamento': 'medio'},
+            },
+            format='json',
+        )
+        self.assertEqual(response_qualificacao.status_code, status.HTTP_200_OK)
+
+        response_conflito = self.client.patch(
+            reverse('cliente-conflito-interesses', args=[self.cliente_adv1.pk]),
+            {
+                'conflito_interesses_status': 'aprovado',
+                'conflito_interesses_observacoes': 'Sem impedimentos.',
+            },
+            format='json',
+        )
+        self.assertEqual(response_conflito.status_code, status.HTTP_200_OK)
+
+        self.cliente_adv1.refresh_from_db()
+        self.assertEqual(self.cliente_adv1.lead_etapa, 'qualificacao')
+        self.assertEqual(self.cliente_adv1.qualificacao_status, 'qualificado')
+        self.assertEqual(self.cliente_adv1.qualificacao_score, 82)
+        self.assertEqual(self.cliente_adv1.conflito_interesses_status, 'aprovado')
+
+    def test_fluxo_automacao_tarefa_contrato_cliente(self):
+        self.client.force_authenticate(user=self.adv1)
+
+        response_automacao = self.client.post(
+            reverse('cliente-automacoes', args=[self.cliente_adv1.pk]),
+            {
+                'canal': 'email',
+                'tipo': 'followup',
+                'status': 'agendado',
+                'mensagem': 'Retornar proposta',
+            },
+            format='json',
+        )
+        self.assertEqual(response_automacao.status_code, status.HTTP_201_CREATED)
+
+        response_tarefa = self.client.post(
+            reverse('cliente-tarefas', args=[self.cliente_adv1.pk]),
+            {
+                'titulo': 'Ligar para cliente',
+                'descricao': 'Validar documentos',
+                'status': 'pendente',
+                'prioridade': 'alta',
+                'responsavel': self.adv1.pk,
+            },
+            format='json',
+        )
+        self.assertEqual(response_tarefa.status_code, status.HTTP_201_CREATED)
+        tarefa_id = response_tarefa.data['id']
+
+        response_concluir = self.client.post(
+            reverse('cliente-concluir-tarefa', args=[self.cliente_adv1.pk, tarefa_id]),
+            {},
+            format='json',
+        )
+        self.assertEqual(response_concluir.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_concluir.data['status'], 'concluida')
+
+        response_contrato = self.client.post(
+            reverse('cliente-contratos', args=[self.cliente_adv1.pk]),
+            {
+                'tipo_documento': 'contrato',
+                'titulo': 'Contrato de Honorários',
+                'assinatura_provedor': 'interno',
+            },
+            format='json',
+        )
+        self.assertEqual(response_contrato.status_code, status.HTTP_201_CREATED)
+        contrato_id = response_contrato.data['id']
+
+        response_enviar = self.client.post(
+            reverse('cliente-enviar-assinatura', args=[self.cliente_adv1.pk, contrato_id]),
+            {'assinatura_link': 'https://assinatura.exemplo/abc'},
+            format='json',
+        )
+        self.assertEqual(response_enviar.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_enviar.data['status_assinatura'], 'enviado')
+
+        response_assinado = self.client.post(
+            reverse('cliente-marcar-assinado', args=[self.cliente_adv1.pk, contrato_id]),
+            {},
+            format='json',
+        )
+        self.assertEqual(response_assinado.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_assinado.data['status_assinatura'], 'assinado')

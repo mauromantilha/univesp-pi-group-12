@@ -4,6 +4,9 @@ from .models import (
     Vara,
     TipoProcesso,
     Cliente,
+    ClienteAutomacao,
+    ClienteTarefa,
+    ClienteContrato,
     Processo,
     Movimentacao,
     ClienteArquivo,
@@ -34,6 +37,10 @@ class TipoProcessoSerializer(serializers.ModelSerializer):
 class ClienteSerializer(serializers.ModelSerializer):
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
     responsavel_nome = serializers.CharField(source='responsavel.get_full_name', read_only=True)
+    lead_responsavel_nome = serializers.CharField(source='lead_responsavel.get_full_name', read_only=True)
+    lead_etapa_display = serializers.CharField(source='get_lead_etapa_display', read_only=True)
+    qualificacao_status_display = serializers.CharField(source='get_qualificacao_status_display', read_only=True)
+    conflito_interesses_status_display = serializers.CharField(source='get_conflito_interesses_status_display', read_only=True)
     processos_possiveis_nomes = serializers.SerializerMethodField()
     
     class Meta:
@@ -46,6 +53,21 @@ class ClienteSerializer(serializers.ModelSerializer):
             'nome',
             'responsavel',
             'responsavel_nome',
+            'lead_responsavel',
+            'lead_responsavel_nome',
+            'lead_origem',
+            'lead_campanha',
+            'lead_etapa',
+            'lead_etapa_display',
+            'lead_sla_resposta_em',
+            'lead_ultimo_contato_em',
+            'formulario_qualificacao',
+            'qualificacao_status',
+            'qualificacao_status_display',
+            'qualificacao_score',
+            'conflito_interesses_status',
+            'conflito_interesses_status_display',
+            'conflito_interesses_observacoes',
             'cpf_cnpj',
             'email',
             'telefone',
@@ -59,6 +81,95 @@ class ClienteSerializer(serializers.ModelSerializer):
 
     def get_processos_possiveis_nomes(self, obj):
         return [tipo.nome for tipo in obj.processos_possiveis.all()]
+
+
+class ClienteAutomacaoSerializer(serializers.ModelSerializer):
+    canal_display = serializers.CharField(source='get_canal_display', read_only=True)
+    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    criado_por_nome = serializers.CharField(source='criado_por.get_full_name', read_only=True)
+
+    class Meta:
+        model = ClienteAutomacao
+        fields = [
+            'id',
+            'cliente',
+            'canal',
+            'canal_display',
+            'tipo',
+            'tipo_display',
+            'status',
+            'status_display',
+            'mensagem',
+            'agendado_em',
+            'enviado_em',
+            'criado_por',
+            'criado_por_nome',
+            'criado_em',
+        ]
+
+
+class ClienteTarefaSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    prioridade_display = serializers.CharField(source='get_prioridade_display', read_only=True)
+    responsavel_nome = serializers.CharField(source='responsavel.get_full_name', read_only=True)
+    criado_por_nome = serializers.CharField(source='criado_por.get_full_name', read_only=True)
+
+    class Meta:
+        model = ClienteTarefa
+        fields = [
+            'id',
+            'cliente',
+            'titulo',
+            'descricao',
+            'status',
+            'status_display',
+            'prioridade',
+            'prioridade_display',
+            'prazo_em',
+            'responsavel',
+            'responsavel_nome',
+            'criado_por',
+            'criado_por_nome',
+            'criado_em',
+            'atualizado_em',
+        ]
+
+
+class ClienteContratoSerializer(serializers.ModelSerializer):
+    tipo_documento_display = serializers.CharField(source='get_tipo_documento_display', read_only=True)
+    status_assinatura_display = serializers.CharField(source='get_status_assinatura_display', read_only=True)
+    criado_por_nome = serializers.CharField(source='criado_por.get_full_name', read_only=True)
+    arquivo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClienteContrato
+        fields = [
+            'id',
+            'cliente',
+            'tipo_documento',
+            'tipo_documento_display',
+            'titulo',
+            'arquivo',
+            'arquivo_url',
+            'status_assinatura',
+            'status_assinatura_display',
+            'assinatura_provedor',
+            'assinatura_envelope_id',
+            'assinatura_link',
+            'assinado_em',
+            'criado_por',
+            'criado_por_nome',
+            'criado_em',
+        ]
+
+    def get_arquivo_url(self, obj):
+        request = self.context.get('request')
+        if not obj.arquivo:
+            return None
+        if request:
+            return request.build_absolute_uri(obj.arquivo.url)
+        return obj.arquivo.url
 
 
 class ClienteArquivoSerializer(serializers.ModelSerializer):
