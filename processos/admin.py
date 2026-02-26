@@ -24,8 +24,8 @@ class ClienteAdmin(admin.ModelAdmin):
 
 @admin.register(Processo)
 class ProcessoAdmin(admin.ModelAdmin):
-    list_display = ('numero', 'cliente', 'advogado', 'tipo', 'vara', 'status', 'criado_em')
-    list_filter = ('status', 'tipo', 'advogado')
+    list_display = ('numero', 'cliente', 'advogado', 'tipo', 'vara', 'status', 'segredo_justica', 'criado_em')
+    list_filter = ('status', 'tipo', 'advogado', 'segredo_justica')
     search_fields = ('numero', 'cliente__nome')
 
 

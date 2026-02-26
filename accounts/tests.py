@@ -1,5 +1,8 @@
 from django.test import TestCase, Client
 from django.urls import reverse
+from django.core.exceptions import ValidationError
+from rest_framework import status
+from rest_framework.test import APITestCase
 from accounts.models import Usuario, UsuarioAtividadeLog
 from processos.models import Cliente, Comarca, Vara, TipoProcesso, Processo
 from agenda.models import Compromisso
@@ -245,3 +248,57 @@ class IAPreditivaViewTest(TestCase):
     def test_sugestoes_jurisprudencia(self):
         response = self.client.get(reverse('sugestoes_jurisprudencia') + '?q=previdenciário')
         self.assertEqual(response.status_code, 200)
+
+
+class RBACUsuariosApiTest(APITestCase):
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(username='rbac_admin', password='pass', papel='administrador')
+        self.adv = Usuario.objects.create_user(username='rbac_adv', password='pass', papel='advogado')
+
+    def test_estagiario_exige_responsavel_advogado(self):
+        with self.assertRaises(ValidationError):
+            Usuario.objects.create_user(username='rbac_est', password='pass', papel='estagiario')
+
+    def test_admin_cria_estagiario_vinculado(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            reverse('usuario-list'),
+            {
+                'username': 'rbac_est_ok',
+                'password': 'pass1234',
+                'papel': 'estagiario',
+                'responsavel_advogado': self.adv.pk,
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        usuario = Usuario.objects.get(username='rbac_est_ok')
+        self.assertEqual(usuario.responsavel_advogado_id, self.adv.pk)
+
+    def test_advogado_nao_cria_usuario(self):
+        self.client.force_authenticate(user=self.adv)
+        response = self.client.post(
+            reverse('usuario-list'),
+            {
+                'username': 'rbac_tentativa',
+                'password': 'pass1234',
+                'papel': 'estagiario',
+                'responsavel_advogado': self.adv.pk,
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_revoga_e_restaura_acesso(self):
+        alvo = Usuario.objects.create_user(username='rbac_alvo', password='pass', papel='advogado')
+        self.client.force_authenticate(user=self.admin)
+
+        response_revogar = self.client.post(reverse('usuario-revogar-acesso', args=[alvo.pk]))
+        self.assertEqual(response_revogar.status_code, status.HTTP_200_OK)
+        alvo.refresh_from_db()
+        self.assertFalse(alvo.is_active)
+
+        response_restaurar = self.client.post(reverse('usuario-restaurar-acesso', args=[alvo.pk]))
+        self.assertEqual(response_restaurar.status_code, status.HTTP_200_OK)
+        alvo.refresh_from_db()
+        self.assertTrue(alvo.is_active)

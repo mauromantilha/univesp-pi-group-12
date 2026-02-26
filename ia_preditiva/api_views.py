@@ -15,6 +15,7 @@ from rest_framework.throttling import UserRateThrottle
 
 from agenda.models import Compromisso
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
+from accounts.rbac import processos_visiveis_queryset
 from consulta_tribunais.models import ConsultaProcesso
 from financeiro.models import Lancamento
 from jurisprudencia.models import Documento
@@ -105,21 +106,16 @@ def _nivel_risco(probabilidade_sucesso):
 
 def _user_processos_queryset(user):
     qs = Processo.objects.select_related('cliente', 'tipo', 'advogado').prefetch_related('movimentacoes').all()
-    if user.is_administrador():
-        return qs
-    return qs.filter(
-        Q(advogado=user)
-        | Q(responsaveis__usuario=user, responsaveis__ativo=True)
-    ).distinct()
+    return processos_visiveis_queryset(qs, user)
 
 
 def _user_clientes_queryset(user):
     qs = Cliente.objects.all()
     if user.is_administrador():
         return qs
+    processos_ids = processos_visiveis_queryset(Processo.objects.all(), user).values_list('id', flat=True)
     return qs.filter(
-        Q(processos__advogado=user)
-        | Q(processos__responsaveis__usuario=user, processos__responsaveis__ativo=True)
+        Q(processos__id__in=processos_ids)
         | Q(responsavel=user)
     ).distinct()
 

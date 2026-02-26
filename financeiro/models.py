@@ -271,7 +271,7 @@ class ApontamentoTempo(models.Model):
         null=True,
         blank=True,
         related_name='apontamentos_tempo_responsavel',
-        limit_choices_to={'papel__in': ['advogado', 'administrador', 'estagiario']},
+        limit_choices_to={'papel__in': ['advogado', 'administrador', 'estagiario', 'assistente']},
         verbose_name='Responsável',
     )
     regra_cobranca = models.ForeignKey(

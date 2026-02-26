@@ -6,6 +6,12 @@ from rest_framework.response import Response
 from django.db.models import Q, Max
 from django.utils import timezone
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
+from accounts.models import Usuario
+from accounts.rbac import (
+    processos_visiveis_queryset,
+    usuario_pode_entrar_processo,
+    validar_vinculo_junior_no_processo,
+)
 from agenda.models import Compromisso
 from agenda.serializers import CompromissoSerializer
 from core.security import validate_upload_file
@@ -87,9 +93,9 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
         if self.request.user.is_administrador():
             return queryset
+        processos_ids = processos_visiveis_queryset(Processo.objects.all(), self.request.user).values_list('id', flat=True)
         return queryset.filter(
-            Q(processos__advogado=self.request.user)
-            | Q(processos__responsaveis__usuario=self.request.user, processos__responsaveis__ativo=True)
+            Q(processos__id__in=processos_ids)
             | Q(responsavel=self.request.user)
         ).distinct()
 
@@ -383,10 +389,7 @@ class ProcessoViewSet(viewsets.ModelViewSet):
         if self.request.user.is_administrador():
             queryset_base = queryset
         else:
-            queryset_base = queryset.filter(
-                Q(advogado=self.request.user)
-                | Q(responsaveis__usuario=self.request.user, responsaveis__ativo=True)
-            ).distinct()
+            queryset_base = processos_visiveis_queryset(queryset, self.request.user)
 
         status_filtro = self.request.query_params.get('status')
         if status_filtro:
@@ -411,9 +414,7 @@ class ProcessoViewSet(viewsets.ModelViewSet):
         return self.request.user.is_administrador() or processo.advogado_id == self.request.user.id
 
     def _is_responsavel_do_processo(self, processo):
-        if self._is_admin_or_principal(processo):
-            return True
-        return processo.responsaveis.filter(usuario=self.request.user, ativo=True).exists()
+        return usuario_pode_entrar_processo(processo, self.request.user)
 
     def _workflow_etapas_para(self, tipo_caso):
         return WORKFLOW_ETAPAS.get(tipo_caso, WORKFLOW_ETAPAS['contencioso'])
@@ -421,13 +422,11 @@ class ProcessoViewSet(viewsets.ModelViewSet):
     def _cliente_disponivel_para_usuario(self, cliente):
         if self.request.user.is_administrador():
             return True
-        return (
-            cliente.processos.filter(
-                Q(advogado=self.request.user)
-                | Q(responsaveis__usuario=self.request.user, responsaveis__ativo=True)
-            ).exists()
-            or cliente.responsavel_id == self.request.user.id
+        processos_ids = processos_visiveis_queryset(
+            Processo.objects.filter(cliente=cliente),
+            self.request.user,
         )
+        return processos_ids.exists() or cliente.responsavel_id == self.request.user.id
 
     def perform_create(self, serializer):
         if self.request.user.is_administrador():
@@ -591,12 +590,19 @@ class ProcessoViewSet(viewsets.ModelViewSet):
             serializer = ProcessoResponsavelSerializer(qs, many=True)
             return Response(serializer.data)
 
-        if not self._is_admin_or_principal(processo):
-            raise PermissionDenied('Somente responsável principal pode gerenciar equipe do processo.')
+        if not request.user.is_administrador():
+            raise PermissionDenied('Somente administradores podem conceder acessos ao processo.')
 
         usuario_id = request.data.get('usuario')
         if not usuario_id:
             return Response({'detail': 'Campo "usuario" é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            usuario_alvo = Usuario.objects.get(pk=usuario_id)
+        except Usuario.DoesNotExist:
+            return Response({'detail': 'Usuário informado não existe.'}, status=status.HTTP_400_BAD_REQUEST)
+        erro_rbac = validar_vinculo_junior_no_processo(processo, usuario_alvo)
+        if erro_rbac:
+            return Response({'detail': erro_rbac}, status=status.HTTP_400_BAD_REQUEST)
         existente = processo.responsaveis.filter(usuario_id=usuario_id).first()
         payload = {**request.data, 'processo': processo.id}
         if existente:
@@ -611,8 +617,8 @@ class ProcessoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['patch', 'delete'], url_path=r'responsaveis/(?P<responsavel_id>[^/.]+)')
     def gerenciar_responsavel(self, request, pk=None, responsavel_id=None):
         processo = self.get_object()
-        if not self._is_admin_or_principal(processo):
-            raise PermissionDenied('Somente responsável principal pode gerenciar equipe do processo.')
+        if not request.user.is_administrador():
+            raise PermissionDenied('Somente administradores podem revogar acessos ao processo.')
         try:
             responsavel = processo.responsaveis.get(pk=responsavel_id)
         except ProcessoResponsavel.DoesNotExist:
@@ -874,25 +880,17 @@ class MovimentacaoViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         if self.request.user.is_administrador():
             return queryset
-        return queryset.filter(
-            Q(processo__advogado=self.request.user)
-            | Q(processo__responsaveis__usuario=self.request.user, processo__responsaveis__ativo=True)
-        ).distinct()
+        processos_ids = processos_visiveis_queryset(Processo.objects.all(), self.request.user).values_list('id', flat=True)
+        return queryset.filter(processo_id__in=processos_ids).distinct()
 
     def perform_create(self, serializer):
         processo = serializer.validated_data['processo']
-        if not self.request.user.is_administrador() and not (
-            processo.advogado_id == self.request.user.id
-            or processo.responsaveis.filter(usuario=self.request.user, ativo=True).exists()
-        ):
+        if not usuario_pode_entrar_processo(processo, self.request.user):
             raise PermissionDenied('Você não pode registrar movimentações neste processo.')
         serializer.save(autor=self.request.user)
 
     def perform_update(self, serializer):
         processo = serializer.validated_data.get('processo', serializer.instance.processo)
-        if not self.request.user.is_administrador() and not (
-            processo.advogado_id == self.request.user.id
-            or processo.responsaveis.filter(usuario=self.request.user, ativo=True).exists()
-        ):
+        if not usuario_pode_entrar_processo(processo, self.request.user):
             raise PermissionDenied('Você não pode editar movimentações deste processo.')
         serializer.save(autor=self.request.user)

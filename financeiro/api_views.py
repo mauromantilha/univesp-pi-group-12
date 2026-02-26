@@ -9,6 +9,8 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
+from accounts.rbac import processos_visiveis_queryset, usuario_pode_entrar_processo
+from processos.models import Processo
 from core.security import validate_upload_file
 from .models import (
     Lancamento,
@@ -35,11 +37,7 @@ from .serializers import (
 def _processo_disponivel_para_usuario(usuario, processo):
     if not processo:
         return True
-    if usuario.is_administrador():
-        return True
-    if processo.advogado_id == usuario.id:
-        return True
-    return processo.responsaveis.filter(usuario=usuario, ativo=True).exists()
+    return usuario_pode_entrar_processo(processo, usuario)
 
 
 def _lancamentos_por_usuario(usuario):
@@ -48,10 +46,10 @@ def _lancamentos_por_usuario(usuario):
     ).all()
     if usuario.is_administrador():
         return qs
+    processos_ids = processos_visiveis_queryset(Processo.objects.all(), usuario).values_list('id', flat=True)
     return qs.filter(
         Q(criado_por=usuario)
-        | Q(processo__advogado=usuario)
-        | Q(processo__responsaveis__usuario=usuario, processo__responsaveis__ativo=True)
+        | Q(processo_id__in=processos_ids)
     ).distinct()
 
 

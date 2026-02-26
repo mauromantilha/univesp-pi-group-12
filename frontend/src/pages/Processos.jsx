@@ -30,6 +30,7 @@ const EMPTY_FORM = {
   tipo: "",
   vara: "",
   status: "em_andamento",
+  segredo_justica: false,
   tipo_caso: "contencioso",
   valor_causa: "",
   objeto: "",
@@ -114,6 +115,7 @@ export default function Processos() {
       tipo: Number(form.tipo),
       vara: form.vara ? Number(form.vara) : null,
       status: form.status,
+      segredo_justica: !!form.segredo_justica,
       tipo_caso: form.tipo_caso,
       valor_causa: form.valor_causa === "" ? null : form.valor_causa,
       objeto: form.objeto,
@@ -195,6 +197,9 @@ export default function Processos() {
                     <span className={STATUS_BADGE[p.status] || "badge-gray"}>
                       {p.status_display || STATUS_LABELS[p.status] || p.status}
                     </span>
+                    {p.segredo_justica && (
+                      <span className="badge-red ml-2">Segredo de Justiça</span>
+                    )}
                   </td>
                   <td className="td text-xs">{formatMoney(p.valor_causa)}</td>
                   <td className="td">
@@ -237,6 +242,18 @@ export default function Processos() {
                       <option key={k} value={k}>{v}</option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="label">Sigilo</label>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 mt-2">
+                    <input
+                      type="checkbox"
+                      checked={!!form.segredo_justica}
+                      onChange={(e) => setForm({ ...form, segredo_justica: e.target.checked })}
+                    />
+                    Segredo de Justiça
+                  </label>
                 </div>
 
                 <div>

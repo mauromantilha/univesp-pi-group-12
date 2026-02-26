@@ -6,6 +6,8 @@ from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
 from .models import Usuario, UsuarioAtividadeLog
+from .activity import registrar_atividade
+from .rbac import processos_visiveis_queryset
 from .serializers import (
     UsuarioSerializer,
     UsuarioCreateSerializer,
@@ -21,6 +23,11 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if self.request.user.is_administrador():
             return Usuario.objects.all()
+        if self.request.user.is_advogado():
+            return Usuario.objects.filter(
+                Q(pk=self.request.user.pk)
+                | Q(responsavel_advogado=self.request.user)
+            ).distinct()
         return Usuario.objects.filter(pk=self.request.user.pk)
 
     def get_serializer_class(self):
@@ -33,7 +40,42 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if not self.request.user.is_administrador():
             raise PermissionDenied('Apenas administradores podem criar usuários.')
-        serializer.save()
+        usuario = serializer.save()
+        registrar_atividade(
+            acao='usuario_criado',
+            request=self.request,
+            usuario=usuario,
+            autor=self.request.user,
+            detalhes=f'Usuário {usuario.username} criado com papel {usuario.papel}.',
+            dados_extra={
+                'papel': usuario.papel,
+                'responsavel_advogado_id': usuario.responsavel_advogado_id,
+            },
+        )
+
+    def perform_update(self, serializer):
+        if not self.request.user.is_administrador() and serializer.instance.pk != self.request.user.pk:
+            raise PermissionDenied('Você só pode alterar seu próprio perfil.')
+        antes_ativo = serializer.instance.is_active
+        usuario = serializer.save()
+        if self.request.user.is_administrador():
+            detalhes = f'Usuário {usuario.username} atualizado.'
+            if antes_ativo != usuario.is_active:
+                detalhes = (
+                    f'Acesso de {usuario.username} {"reativado" if usuario.is_active else "revogado"} por administrador.'
+                )
+            registrar_atividade(
+                acao='usuario_editado',
+                request=self.request,
+                usuario=usuario,
+                autor=self.request.user,
+                detalhes=detalhes,
+                dados_extra={
+                    'is_active': usuario.is_active,
+                    'papel': usuario.papel,
+                    'responsavel_advogado_id': usuario.responsavel_advogado_id,
+                },
+            )
 
     def perform_destroy(self, instance):
         if not self.request.user.is_administrador():
@@ -59,10 +101,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             clientes_qs = Cliente.objects.all()
             compromissos_qs = Compromisso.objects.all()
         else:
-            processos_qs = Processo.objects.filter(
-                Q(advogado=request.user)
-                | Q(responsaveis__usuario=request.user, responsaveis__ativo=True)
-            ).distinct()
+            processos_qs = processos_visiveis_queryset(Processo.objects.all(), request.user)
             clientes_qs = Cliente.objects.filter(
                 Q(processos__advogado=request.user)
                 | Q(processos__responsaveis__usuario=request.user, processos__responsaveis__ativo=True)
@@ -114,6 +153,53 @@ class UsuarioViewSet(viewsets.ModelViewSet):
 
         serializer = UsuarioAtividadeLogSerializer(qs[:limit], many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def equipe(self, request):
+        if request.user.is_administrador():
+            qs = Usuario.objects.filter(papel__in=['estagiario', 'assistente']).select_related('responsavel_advogado')
+        elif request.user.is_advogado():
+            qs = Usuario.objects.filter(responsavel_advogado=request.user).select_related('responsavel_advogado')
+        else:
+            qs = Usuario.objects.none()
+        serializer = UsuarioSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='revogar-acesso')
+    def revogar_acesso(self, request, pk=None):
+        if not request.user.is_administrador():
+            raise PermissionDenied('Somente administradores podem revogar acessos.')
+        usuario = self.get_object()
+        if usuario.is_administrador() and Usuario.objects.filter(papel='administrador', is_active=True).count() <= 1:
+            return Response({'detail': 'Não é permitido revogar o último administrador ativo.'}, status=400)
+        usuario.is_active = False
+        usuario.save(update_fields=['is_active'])
+        registrar_atividade(
+            acao='usuario_editado',
+            request=request,
+            usuario=usuario,
+            autor=request.user,
+            detalhes=f'Acesso do usuário {usuario.username} revogado.',
+            dados_extra={'is_active': False},
+        )
+        return Response(UsuarioSerializer(usuario).data)
+
+    @action(detail=True, methods=['post'], url_path='restaurar-acesso')
+    def restaurar_acesso(self, request, pk=None):
+        if not request.user.is_administrador():
+            raise PermissionDenied('Somente administradores podem restaurar acessos.')
+        usuario = self.get_object()
+        usuario.is_active = True
+        usuario.save(update_fields=['is_active'])
+        registrar_atividade(
+            acao='usuario_editado',
+            request=request,
+            usuario=usuario,
+            autor=request.user,
+            detalhes=f'Acesso do usuário {usuario.username} restaurado.',
+            dados_extra={'is_active': True},
+        )
+        return Response(UsuarioSerializer(usuario).data)
 
     @action(detail=False, methods=['get'])
     def auditoria(self, request):

@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from django.db.models import Q
 from django.utils import timezone
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
+from accounts.rbac import processos_visiveis_queryset, usuario_pode_entrar_processo
+from processos.models import Processo
 from .models import Compromisso
 from .serializers import CompromissoSerializer
 
@@ -20,18 +22,15 @@ class CompromissoViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         if self.request.user.is_administrador():
             return queryset
-        return queryset.filter(
-            Q(advogado=self.request.user)
-            | Q(processo__responsaveis__usuario=self.request.user, processo__responsaveis__ativo=True)
-        ).distinct()
+        processos_ids = processos_visiveis_queryset(Processo.objects.all(), self.request.user).values_list('id', flat=True)
+        return queryset.filter(Q(advogado=self.request.user) | Q(processo_id__in=processos_ids)).distinct()
 
     def perform_create(self, serializer):
         processo = serializer.validated_data.get('processo')
         if (
             processo
             and not self.request.user.is_administrador()
-            and processo.advogado_id != self.request.user.id
-            and not processo.responsaveis.filter(usuario=self.request.user, ativo=True).exists()
+            and not usuario_pode_entrar_processo(processo, self.request.user)
         ):
             raise PermissionDenied('Você não pode vincular compromisso a processo de outro advogado.')
         if self.request.user.is_administrador():
@@ -44,8 +43,7 @@ class CompromissoViewSet(viewsets.ModelViewSet):
         if (
             processo
             and not self.request.user.is_administrador()
-            and processo.advogado_id != self.request.user.id
-            and not processo.responsaveis.filter(usuario=self.request.user, ativo=True).exists()
+            and not usuario_pode_entrar_processo(processo, self.request.user)
         ):
             raise PermissionDenied('Você não pode vincular compromisso a processo de outro advogado.')
         if self.request.user.is_administrador():

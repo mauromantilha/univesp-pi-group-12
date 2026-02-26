@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../api/axios";
 import toast from "react-hot-toast";
+import { useAuth } from "../context/AuthContext";
 
 const STATUS_BADGE = {
   em_andamento: "badge-blue",
@@ -59,6 +60,7 @@ const PAPEL_RESPONSAVEL = {
   principal: "Principal",
   apoio: "Apoio",
   estagiario: "Estagiário",
+  assistente: "Assistente",
 };
 
 const EMPTY_EDIT_FORM = {
@@ -67,6 +69,7 @@ const EMPTY_EDIT_FORM = {
   tipo: "",
   vara: "",
   status: "em_andamento",
+  segredo_justica: false,
   tipo_caso: "contencioso",
   valor_causa: "",
   objeto: "",
@@ -131,6 +134,8 @@ function userLabel(user) {
 export default function ProcessoDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.papel === "administrador";
 
   const [processo, setProcesso] = useState(null);
   const [movs, setMovs] = useState([]);
@@ -172,6 +177,7 @@ export default function ProcessoDetail() {
       tipo: res.data.tipo || "",
       vara: res.data.vara || "",
       status: res.data.status || "em_andamento",
+      segredo_justica: !!res.data.segredo_justica,
       tipo_caso: res.data.tipo_caso || "contencioso",
       valor_causa: res.data.valor_causa || "",
       objeto: res.data.objeto || "",
@@ -272,6 +278,7 @@ export default function ProcessoDetail() {
       tipo: Number(editForm.tipo),
       vara: editForm.vara ? Number(editForm.vara) : null,
       status: editForm.status,
+      segredo_justica: !!editForm.segredo_justica,
       tipo_caso: editForm.tipo_caso,
       valor_causa: editForm.valor_causa === "" ? null : editForm.valor_causa,
       objeto: editForm.objeto,
@@ -581,6 +588,7 @@ export default function ProcessoDetail() {
             <span className={STATUS_BADGE[processo.status] || "badge-gray"}>
               {processo.status_display || STATUS_LABELS[processo.status] || processo.status}
             </span>
+            {processo.segredo_justica && <span className="badge-red">Segredo de Justiça</span>}
             <button onClick={() => setShowEditModal(true)} className="btn-secondary text-sm">Editar</button>
             <button onClick={handleExcluirProcesso} className="btn-secondary text-sm text-red-700">Excluir</button>
             <button onClick={() => atualizarStatus("inativar", "Inativar")} className="btn-secondary text-sm text-amber-700">Inativar</button>
@@ -604,6 +612,7 @@ export default function ProcessoDetail() {
           />
           <InfoItem label="Advogado" value={processo.advogado_nome || "-"} />
           <InfoItem label="Status" value={processo.status_display || STATUS_LABELS[processo.status] || processo.status} />
+          <InfoItem label="Sigilo" value={processo.segredo_justica ? "Segredo de Justiça" : "Público interno"} />
           <InfoItem label="Última atualização" value={processo.atualizado_em ? new Date(processo.atualizado_em).toLocaleString("pt-BR") : "-"} />
         </div>
 
@@ -694,28 +703,35 @@ export default function ProcessoDetail() {
 
         <div className="card space-y-4">
           <h2 className="text-base font-semibold">Responsáveis</h2>
-          <form onSubmit={adicionarResponsavel} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="md:col-span-2">
-              <label className="label">Usuário</label>
-              <select className="input" value={responsavelForm.usuario} onChange={(e) => setResponsavelForm({ ...responsavelForm, usuario: e.target.value })}>
-                <option value="">Selecione...</option>
-                {usuarios.map((u) => (
-                  <option key={u.id} value={u.id}>{userLabel(u)}</option>
-                ))}
-              </select>
+          {isAdmin ? (
+            <form onSubmit={adicionarResponsavel} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="md:col-span-2">
+                <label className="label">Usuário</label>
+                <select className="input" value={responsavelForm.usuario} onChange={(e) => setResponsavelForm({ ...responsavelForm, usuario: e.target.value })}>
+                  <option value="">Selecione...</option>
+                  {usuarios.map((u) => (
+                    <option key={u.id} value={u.id}>{userLabel(u)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Papel</label>
+                <select className="input" value={responsavelForm.papel} onChange={(e) => setResponsavelForm({ ...responsavelForm, papel: e.target.value })}>
+                  <option value="principal">Principal</option>
+                  <option value="apoio">Apoio</option>
+                  <option value="estagiario">Estagiário</option>
+                  <option value="assistente">Assistente</option>
+                </select>
+              </div>
+              <div className="md:col-span-3">
+                <button type="submit" className="btn-secondary text-sm">+ Vincular Responsável</button>
+              </div>
+            </form>
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              Somente administradores podem conceder ou revogar acessos de equipe no processo.
             </div>
-            <div>
-              <label className="label">Papel</label>
-              <select className="input" value={responsavelForm.papel} onChange={(e) => setResponsavelForm({ ...responsavelForm, papel: e.target.value })}>
-                <option value="principal">Principal</option>
-                <option value="apoio">Apoio</option>
-                <option value="estagiario">Estagiário</option>
-              </select>
-            </div>
-            <div className="md:col-span-3">
-              <button type="submit" className="btn-secondary text-sm">+ Vincular Responsável</button>
-            </div>
-          </form>
+          )}
 
           <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
             {responsaveis.length === 0 ? <p className="text-sm text-gray-400">Nenhum responsável vinculado.</p> : responsaveis.map((r) => (
@@ -724,9 +740,11 @@ export default function ProcessoDetail() {
                   <div className="font-medium">{r.usuario_nome || `Usuário #${r.usuario}`}</div>
                   <div className="text-xs text-gray-500">{r.papel_display || PAPEL_RESPONSAVEL[r.papel] || r.papel}</div>
                 </div>
-                <button onClick={() => toggleResponsavelAtivo(r)} className="btn-secondary text-xs px-3 py-1">
-                  {r.ativo ? "Inativar" : "Ativar"}
-                </button>
+                {isAdmin && (
+                  <button onClick={() => toggleResponsavelAtivo(r)} className="btn-secondary text-xs px-3 py-1">
+                    {r.ativo ? "Inativar" : "Ativar"}
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -1086,6 +1104,18 @@ export default function ProcessoDetail() {
                       <option key={k} value={k}>{v}</option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="label">Sigilo</label>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 mt-2">
+                    <input
+                      type="checkbox"
+                      checked={!!editForm.segredo_justica}
+                      onChange={(e) => setEditForm({ ...editForm, segredo_justica: e.target.checked })}
+                    />
+                    Segredo de Justiça
+                  </label>
                 </div>
 
                 <div>

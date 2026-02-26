@@ -341,6 +341,7 @@ class Processo(models.Model):
     )
     valor_causa = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name='Valor da Causa (R$)')
     objeto = models.TextField(verbose_name='Objeto / Descrição')
+    segredo_justica = models.BooleanField(default=False, verbose_name='Segredo de Justiça')
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -401,6 +402,7 @@ class ProcessoResponsavel(models.Model):
         ('principal', 'Principal'),
         ('apoio', 'Apoio'),
         ('estagiario', 'Estagiário'),
+        ('assistente', 'Assistente'),
     ]
 
     processo = models.ForeignKey(
@@ -413,7 +415,7 @@ class ProcessoResponsavel(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='responsabilidades_processo',
-        limit_choices_to={'papel__in': ['advogado', 'administrador', 'estagiario']},
+        limit_choices_to={'papel__in': ['advogado', 'administrador', 'estagiario', 'assistente']},
         verbose_name='Usuário',
     )
     papel = models.CharField(max_length=20, choices=PAPEL_CHOICES, default='apoio', verbose_name='Papel')
@@ -464,7 +466,7 @@ class ProcessoTarefa(models.Model):
         null=True,
         blank=True,
         related_name='tarefas_processo_responsavel',
-        limit_choices_to={'papel__in': ['advogado', 'administrador', 'estagiario']},
+        limit_choices_to={'papel__in': ['advogado', 'administrador', 'estagiario', 'assistente']},
         verbose_name='Responsável',
     )
     criado_por = models.ForeignKey(

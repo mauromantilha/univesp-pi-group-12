@@ -24,6 +24,18 @@ class ProcessosApiPermissoesTest(APITestCase):
             password='pass',
             papel='advogado',
         )
+        self.estagiario_adv1 = Usuario.objects.create_user(
+            username='api_estagiario_1',
+            password='pass',
+            papel='estagiario',
+            responsavel_advogado=self.adv1,
+        )
+        self.estagiario_adv2 = Usuario.objects.create_user(
+            username='api_estagiario_2',
+            password='pass',
+            papel='estagiario',
+            responsavel_advogado=self.adv2,
+        )
         self.tipo = TipoProcesso.objects.create(nome='Cível API')
 
         self.cliente_adv1 = Cliente.objects.create(
@@ -297,12 +309,15 @@ class ProcessosApiPermissoesTest(APITestCase):
         )
         self.assertEqual(response_parte.status_code, status.HTTP_201_CREATED)
 
+        self.client.force_authenticate(user=self.admin)
         response_responsavel = self.client.post(
             reverse('processo-responsaveis', args=[self.processo_adv1.pk]),
             {'usuario': self.adv2.pk, 'papel': 'apoio'},
             format='json',
         )
         self.assertIn(response_responsavel.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+
+        self.client.force_authenticate(user=self.adv1)
 
         response_tarefa = self.client.post(
             reverse('processo-tarefas', args=[self.processo_adv1.pk]),
@@ -356,8 +371,8 @@ class ProcessosApiPermissoesTest(APITestCase):
         ids = [item['id'] for item in response_lista_processos_adv2.data['results']]
         self.assertIn(self.processo_adv1.pk, ids)
 
-    def test_responsavel_apoio_nao_gerencia_time_processo(self):
-        self.client.force_authenticate(user=self.adv1)
+    def test_apenas_admin_gerencia_time_processo(self):
+        self.client.force_authenticate(user=self.admin)
         self.client.post(
             reverse('processo-responsaveis', args=[self.processo_adv1.pk]),
             {'usuario': self.adv2.pk, 'papel': 'apoio'},
@@ -371,6 +386,39 @@ class ProcessosApiPermissoesTest(APITestCase):
             format='json',
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(user=self.adv1)
+        response_adv1 = self.client.post(
+            reverse('processo-responsaveis', args=[self.processo_adv1.pk]),
+            {'usuario': self.adv2.pk, 'papel': 'apoio'},
+            format='json',
+        )
+        self.assertEqual(response_adv1.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_rbac_equipe_bloqueia_estagiario_de_outro_advogado_em_sigilo(self):
+        self.processo_adv1.segredo_justica = True
+        self.processo_adv1.save(update_fields=['segredo_justica'])
+
+        self.client.force_authenticate(user=self.admin)
+        response_bloqueado = self.client.post(
+            reverse('processo-responsaveis', args=[self.processo_adv1.pk]),
+            {'usuario': self.estagiario_adv2.pk, 'papel': 'estagiario'},
+            format='json',
+        )
+        self.assertEqual(response_bloqueado.status_code, status.HTTP_400_BAD_REQUEST)
+
+        response_ok = self.client.post(
+            reverse('processo-responsaveis', args=[self.processo_adv1.pk]),
+            {'usuario': self.estagiario_adv1.pk, 'papel': 'estagiario'},
+            format='json',
+        )
+        self.assertEqual(response_ok.status_code, status.HTTP_201_CREATED)
+
+        self.client.force_authenticate(user=self.estagiario_adv1)
+        response_lista = self.client.get(reverse('processo-list'))
+        self.assertEqual(response_lista.status_code, status.HTTP_200_OK)
+        ids = [item['id'] for item in response_lista.data['results']]
+        self.assertIn(self.processo_adv1.pk, ids)
 
     def test_upload_documentos_cliente_com_versionamento_e_busca(self):
         self.client.force_authenticate(user=self.admin)

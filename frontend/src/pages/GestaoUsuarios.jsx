@@ -34,6 +34,18 @@ export default function GestaoUsuarios() {
   const [atividades, setAtividades] = useState([]);
   const [auditoria, setAuditoria] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({
+    username: "",
+    email: "",
+    password: "",
+    first_name: "",
+    last_name: "",
+    papel: "advogado",
+    telefone: "",
+    oab: "",
+    responsavel_advogado: "",
+  });
 
   async function fetchAll() {
     setLoading(true);
@@ -57,6 +69,14 @@ export default function GestaoUsuarios() {
     fetchAll();
   }, []);
 
+  const advogadosAtivos = useMemo(
+    () =>
+      usuarios.filter(
+        (u) => u.is_active && (u.papel === "advogado" || u.papel === "administrador")
+      ),
+    [usuarios]
+  );
+
   const resumo = useMemo(() => {
     const ativos = usuarios.filter((u) => u.is_active).length;
     const inativos = usuarios.filter((u) => !u.is_active).length;
@@ -71,6 +91,65 @@ export default function GestaoUsuarios() {
         <p className="text-sm text-gray-500 mt-2">Acesso restrito ao administrador.</p>
       </div>
     );
+  }
+
+  async function criarUsuario(e) {
+    e.preventDefault();
+    if (!form.username.trim() || !form.password.trim()) {
+      toast.error("Username e senha são obrigatórios");
+      return;
+    }
+    const papelJunior = form.papel === "estagiario" || form.papel === "assistente";
+    if (papelJunior && !form.responsavel_advogado) {
+      toast.error("Selecione o advogado responsável");
+      return;
+    }
+    const payload = {
+      username: form.username.trim(),
+      email: form.email.trim() || "",
+      password: form.password,
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
+      papel: form.papel,
+      telefone: form.telefone.trim() || null,
+      oab: form.papel === "advogado" ? form.oab.trim() || null : null,
+      responsavel_advogado: papelJunior ? Number(form.responsavel_advogado) : null,
+    };
+
+    setCreating(true);
+    try {
+      await api.post("/usuarios/", payload);
+      toast.success("Usuário criado com sucesso");
+      setForm({
+        username: "",
+        email: "",
+        password: "",
+        first_name: "",
+        last_name: "",
+        papel: "advogado",
+        telefone: "",
+        oab: "",
+        responsavel_advogado: "",
+      });
+      await fetchAll();
+    } catch (err) {
+      const data = err.response?.data;
+      toast.error(data ? JSON.stringify(data).slice(0, 180) : "Erro ao criar usuário");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function toggleAcesso(usuario) {
+    const endpoint = usuario.is_active ? "revogar-acesso" : "restaurar-acesso";
+    try {
+      await api.post(`/usuarios/${usuario.id}/${endpoint}/`, {});
+      toast.success(usuario.is_active ? "Acesso revogado" : "Acesso restaurado");
+      await fetchAll();
+    } catch (err) {
+      const data = err.response?.data;
+      toast.error(data?.detail || "Erro ao atualizar acesso do usuário");
+    }
   }
 
   return (
@@ -91,6 +170,69 @@ export default function GestaoUsuarios() {
         <StatCard label="Advogados Ativos" value={resumo.advogadosAtivos} color="blue" />
       </div>
 
+      <div className="card">
+        <h2 className="font-semibold text-gray-800 mb-4">Criar Usuário (RBAC)</h2>
+        <form onSubmit={criarUsuario} className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label className="label">Username *</label>
+            <input className="input" value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="label">Senha *</label>
+            <input className="input" type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="label">Papel</label>
+            <select className="input" value={form.papel} onChange={(e) => setForm((f) => ({ ...f, papel: e.target.value }))}>
+              <option value="advogado">Advogado</option>
+              <option value="estagiario">Estagiário</option>
+              <option value="assistente">Assistente</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Advogado Responsável</label>
+            <select
+              className="input"
+              value={form.responsavel_advogado}
+              onChange={(e) => setForm((f) => ({ ...f, responsavel_advogado: e.target.value }))}
+              disabled={form.papel === "advogado"}
+            >
+              <option value="">Selecione...</option>
+              {advogadosAtivos.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {(u.first_name || u.last_name) ? `${u.first_name || ""} ${u.last_name || ""}`.trim() : u.username}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Nome</label>
+            <input className="input" value={form.first_name} onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label">Sobrenome</label>
+            <input className="input" value={form.last_name} onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label">Email</label>
+            <input className="input" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label">Telefone</label>
+            <input className="input" value={form.telefone} onChange={(e) => setForm((f) => ({ ...f, telefone: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label">OAB (advogado)</label>
+            <input className="input" value={form.oab} onChange={(e) => setForm((f) => ({ ...f, oab: e.target.value }))} disabled={form.papel !== "advogado"} />
+          </div>
+          <div className="md:col-span-4">
+            <button className="btn-primary" disabled={creating}>
+              {creating ? "Criando..." : "Criar Usuário"}
+            </button>
+          </div>
+        </form>
+      </div>
+
       <div className="card p-0 overflow-x-auto">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-semibold text-gray-800">Gerenciar Usuários</h2>
@@ -102,24 +244,37 @@ export default function GestaoUsuarios() {
               <th className="text-left px-4 py-2 text-xs text-gray-500 uppercase">Nome</th>
               <th className="text-left px-4 py-2 text-xs text-gray-500 uppercase">Usuário</th>
               <th className="text-left px-4 py-2 text-xs text-gray-500 uppercase">Papel</th>
+              <th className="text-left px-4 py-2 text-xs text-gray-500 uppercase">Responsável</th>
               <th className="text-left px-4 py-2 text-xs text-gray-500 uppercase">Email</th>
               <th className="text-left px-4 py-2 text-xs text-gray-500 uppercase">Status</th>
+              <th className="text-left px-4 py-2 text-xs text-gray-500 uppercase">Ações</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">Carregando...</td></tr>
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400">Carregando...</td></tr>
             ) : usuarios.length === 0 ? (
-              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">Nenhum usuário</td></tr>
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400">Nenhum usuário</td></tr>
             ) : (
               usuarios.map((u) => (
                 <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
                   <td className="px-4 py-2">{`${u.first_name || ""} ${u.last_name || ""}`.trim() || "-"}</td>
                   <td className="px-4 py-2 font-mono text-xs">{u.username}</td>
                   <td className="px-4 py-2">{u.papel_display || u.papel}</td>
+                  <td className="px-4 py-2">{u.responsavel_advogado_nome || "-"}</td>
                   <td className="px-4 py-2">{u.email || "-"}</td>
                   <td className="px-4 py-2">
                     <span className={u.is_active ? "badge-green" : "badge-gray"}>{u.is_active ? "Ativo" : "Inativo"}</span>
+                  </td>
+                  <td className="px-4 py-2">
+                    {u.id !== user?.id && (
+                      <button
+                        onClick={() => toggleAcesso(u)}
+                        className="btn-secondary text-xs"
+                      >
+                        {u.is_active ? "Revogar" : "Restaurar"}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))

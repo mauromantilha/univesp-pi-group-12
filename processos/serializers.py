@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from accounts.rbac import validar_vinculo_junior_no_processo
 from core.security import decrypt_pii, encrypt_pii, validate_upload_file
 from .models import (
     Comarca,
@@ -224,6 +225,16 @@ class ProcessoResponsavelSerializer(serializers.ModelSerializer):
             'criado_em',
         ]
 
+    def validate(self, attrs):
+        processo = attrs.get('processo') or getattr(self.instance, 'processo', None)
+        usuario = attrs.get('usuario') or getattr(self.instance, 'usuario', None)
+        if not processo or not usuario:
+            return attrs
+        erro = validar_vinculo_junior_no_processo(processo, usuario)
+        if erro:
+            raise serializers.ValidationError({'usuario': erro})
+        return attrs
+
 
 class ProcessoTarefaSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -340,6 +351,7 @@ class ProcessoSerializer(serializers.ModelSerializer):
                   'advogado', 'advogado_nome',
                   'tipo', 'tipo_nome', 'vara', 'vara_nome',
                   'status', 'status_display',
+                  'segredo_justica',
                   'tipo_caso', 'tipo_caso_display',
                   'etapa_workflow', 'etapa_workflow_display',
                   'objeto', 'valor_causa',
@@ -445,6 +457,7 @@ class ProcessoListSerializer(serializers.ModelSerializer):
         fields = ['id', 'numero', 'cliente', 'cliente_nome',
                   'tipo', 'tipo_nome', 'valor_causa', 'objeto', 'vara',
                   'advogado_nome',
+                  'segredo_justica',
                   'tipo_caso', 'tipo_caso_display',
                   'etapa_workflow', 'etapa_workflow_display',
                   'status', 'status_display',

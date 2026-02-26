@@ -6,7 +6,7 @@ from .models import Usuario
 class UsuarioCreationForm(UserCreationForm):
     class Meta(UserCreationForm.Meta):
         model = Usuario
-        fields = ('username', 'first_name', 'last_name', 'email', 'papel', 'oab', 'telefone', 'foto')
+        fields = ('username', 'first_name', 'last_name', 'email', 'papel', 'responsavel_advogado', 'oab', 'telefone', 'foto')
 
 
 class UsuarioChangeForm(UserChangeForm):
@@ -14,7 +14,7 @@ class UsuarioChangeForm(UserChangeForm):
 
     class Meta:
         model = Usuario
-        fields = ('first_name', 'last_name', 'email', 'papel', 'oab', 'telefone', 'foto')
+        fields = ('first_name', 'last_name', 'email', 'papel', 'responsavel_advogado', 'oab', 'telefone', 'foto')
 
 
 class PerfilForm(forms.ModelForm):

@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.core.exceptions import ValidationError
 
 
 class Usuario(AbstractUser):
@@ -8,11 +9,21 @@ class Usuario(AbstractUser):
         ('administrador', 'Administrador'),
         ('advogado', 'Advogado'),
         ('estagiario', 'Estagiário'),
+        ('assistente', 'Assistente'),
     ]
     papel = models.CharField(max_length=20, choices=PAPEL_CHOICES, default='advogado', verbose_name='Papel')
     oab = models.CharField(max_length=20, blank=True, null=True, verbose_name='OAB')
     telefone = models.CharField(max_length=20, blank=True, null=True, verbose_name='Telefone')
     foto = models.ImageField(upload_to='fotos_usuarios/', blank=True, null=True, verbose_name='Foto')
+    responsavel_advogado = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='equipe',
+        verbose_name='Advogado Responsável',
+        limit_choices_to={'papel__in': ['advogado', 'administrador']},
+    )
 
     class Meta:
         verbose_name = 'Usuário'
@@ -29,6 +40,31 @@ class Usuario(AbstractUser):
 
     def is_estagiario(self):
         return self.papel == 'estagiario'
+
+    def is_assistente(self):
+        return self.papel == 'assistente'
+
+    def is_colaborador_junior(self):
+        return self.papel in {'estagiario', 'assistente'}
+
+    def clean(self):
+        super().clean()
+        if self.is_colaborador_junior():
+            if not self.responsavel_advogado_id:
+                raise ValidationError({'responsavel_advogado': 'Estagiário/assistente deve possuir advogado responsável.'})
+            if self.responsavel_advogado_id == self.id:
+                raise ValidationError({'responsavel_advogado': 'Usuário não pode ser responsável por si próprio.'})
+            if not (
+                self.responsavel_advogado
+                and self.responsavel_advogado.papel in {'advogado', 'administrador'}
+            ):
+                raise ValidationError({'responsavel_advogado': 'Responsável deve ser advogado ou administrador.'})
+        elif self.responsavel_advogado_id:
+            self.responsavel_advogado = None
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class UsuarioAtividadeLog(models.Model):

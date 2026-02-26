@@ -72,7 +72,7 @@ class ProcessoForm(forms.ModelForm):
 
     class Meta:
         model = Processo
-        fields = ['numero', 'cliente', 'advogado', 'tipo', 'vara', 'status', 'valor_causa', 'objeto']
+        fields = ['numero', 'cliente', 'advogado', 'tipo', 'vara', 'status', 'segredo_justica', 'valor_causa', 'objeto']
         widgets = {
             'numero': forms.TextInput(attrs=WIDGET_ATTRS),
             'cliente': forms.Select(attrs=SELECT_ATTRS),
@@ -80,6 +80,7 @@ class ProcessoForm(forms.ModelForm):
             'tipo': forms.Select(attrs=SELECT_ATTRS),
             'vara': forms.Select(attrs=SELECT_ATTRS),
             'status': forms.Select(attrs=SELECT_ATTRS),
+            'segredo_justica': forms.CheckboxInput(),
             'valor_causa': forms.NumberInput(attrs=WIDGET_ATTRS),
             'objeto': forms.Textarea(attrs={**WIDGET_ATTRS, 'rows': 4}),
         }
