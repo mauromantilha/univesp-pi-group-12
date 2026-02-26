@@ -4,6 +4,8 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from django.db.models import Q
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
+from accounts.rbac import processos_visiveis_queryset, usuario_pode_entrar_processo
+from processos.models import Processo
 from .models import Documento
 from .serializers import DocumentoSerializer
 
@@ -16,6 +18,15 @@ class DocumentoViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = super().get_queryset()
+        if not self.request.user.is_administrador():
+            processos_ids = processos_visiveis_queryset(
+                Processo.objects.all(),
+                self.request.user,
+            ).values_list('id', flat=True)
+            queryset = queryset.filter(
+                Q(adicionado_por=self.request.user)
+                | Q(processo_referencia_id__in=processos_ids)
+            ).distinct()
         
         # Busca textual
         q = self.request.query_params.get('q', '')
@@ -43,7 +54,7 @@ class DocumentoViewSet(viewsets.ModelViewSet):
         if (
             processo_referencia
             and not self.request.user.is_administrador()
-            and processo_referencia.advogado_id != self.request.user.id
+            and not usuario_pode_entrar_processo(processo_referencia, self.request.user)
         ):
             raise PermissionDenied('Você não pode vincular documento a processo de outro advogado.')
         serializer.save(adicionado_por=self.request.user)
@@ -55,7 +66,7 @@ class DocumentoViewSet(viewsets.ModelViewSet):
         if (
             processo_referencia
             and not self.request.user.is_administrador()
-            and processo_referencia.advogado_id != self.request.user.id
+            and not usuario_pode_entrar_processo(processo_referencia, self.request.user)
         ):
             raise PermissionDenied('Você não pode vincular documento a processo de outro advogado.')
         serializer.save(adicionado_por=serializer.instance.adicionado_por)
