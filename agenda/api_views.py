@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from datetime import datetime, timedelta
+from django.db.models import Q
 from django.utils import timezone
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
 from .models import Compromisso
@@ -19,7 +20,10 @@ class CompromissoViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         if self.request.user.is_administrador():
             return queryset
-        return queryset.filter(advogado=self.request.user)
+        return queryset.filter(
+            Q(advogado=self.request.user)
+            | Q(processo__responsaveis__usuario=self.request.user, processo__responsaveis__ativo=True)
+        ).distinct()
 
     def perform_create(self, serializer):
         processo = serializer.validated_data.get('processo')
@@ -27,6 +31,7 @@ class CompromissoViewSet(viewsets.ModelViewSet):
             processo
             and not self.request.user.is_administrador()
             and processo.advogado_id != self.request.user.id
+            and not processo.responsaveis.filter(usuario=self.request.user, ativo=True).exists()
         ):
             raise PermissionDenied('Você não pode vincular compromisso a processo de outro advogado.')
         if self.request.user.is_administrador():
@@ -40,6 +45,7 @@ class CompromissoViewSet(viewsets.ModelViewSet):
             processo
             and not self.request.user.is_administrador()
             and processo.advogado_id != self.request.user.id
+            and not processo.responsaveis.filter(usuario=self.request.user, ativo=True).exists()
         ):
             raise PermissionDenied('Você não pode vincular compromisso a processo de outro advogado.')
         if self.request.user.is_administrador():

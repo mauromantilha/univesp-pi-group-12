@@ -293,6 +293,20 @@ class Processo(models.Model):
         ('finalizado', 'Finalizado'),
         ('arquivado', 'Arquivado'),
     ]
+    TIPO_CASO_CHOICES = [
+        ('contencioso', 'Contencioso'),
+        ('consultivo', 'Consultivo'),
+        ('massificado', 'Massificado'),
+    ]
+    ETAPA_WORKFLOW_CHOICES = [
+        ('triagem', 'Triagem'),
+        ('estrategia', 'Estratégia'),
+        ('instrucao', 'Instrução'),
+        ('negociacao', 'Negociação'),
+        ('execucao', 'Execução'),
+        ('monitoramento', 'Monitoramento'),
+        ('encerramento', 'Encerramento'),
+    ]
     numero = models.CharField(max_length=30, unique=True, verbose_name='Número do Processo')
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name='processos', verbose_name='Cliente')
     advogado = models.ForeignKey(
@@ -306,6 +320,18 @@ class Processo(models.Model):
     tipo = models.ForeignKey(TipoProcesso, on_delete=models.SET_NULL, null=True, verbose_name='Tipo')
     vara = models.ForeignKey(Vara, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='Vara')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='em_andamento', verbose_name='Status')
+    tipo_caso = models.CharField(
+        max_length=20,
+        choices=TIPO_CASO_CHOICES,
+        default='contencioso',
+        verbose_name='Tipo de Caso',
+    )
+    etapa_workflow = models.CharField(
+        max_length=20,
+        choices=ETAPA_WORKFLOW_CHOICES,
+        default='triagem',
+        verbose_name='Etapa do Workflow',
+    )
     valor_causa = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name='Valor da Causa (R$)')
     objeto = models.TextField(verbose_name='Objeto / Descrição')
     criado_em = models.DateTimeField(auto_now_add=True)
@@ -320,6 +346,162 @@ class Processo(models.Model):
         return f'{self.numero} - {self.cliente}'
 
 
+class ProcessoParte(models.Model):
+    TIPO_PARTE_CHOICES = [
+        ('autor', 'Autor'),
+        ('reu', 'Réu'),
+        ('terceiro', 'Terceiro Interessado'),
+        ('assistente', 'Assistente'),
+        ('testemunha', 'Testemunha'),
+        ('outro', 'Outro'),
+    ]
+
+    processo = models.ForeignKey(
+        Processo,
+        on_delete=models.CASCADE,
+        related_name='partes',
+        verbose_name='Processo',
+    )
+    tipo_parte = models.CharField(max_length=20, choices=TIPO_PARTE_CHOICES, default='autor', verbose_name='Tipo da Parte')
+    nome = models.CharField(max_length=220, verbose_name='Nome')
+    documento = models.CharField(max_length=20, blank=True, null=True, verbose_name='CPF/CNPJ')
+    observacoes = models.TextField(blank=True, null=True, verbose_name='Observações')
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Parte do Processo'
+        verbose_name_plural = 'Partes do Processo'
+        ordering = ['nome']
+
+    def __str__(self):
+        return f'{self.get_tipo_parte_display()} - {self.nome}'
+
+
+class ProcessoResponsavel(models.Model):
+    PAPEL_CHOICES = [
+        ('principal', 'Principal'),
+        ('apoio', 'Apoio'),
+        ('estagiario', 'Estagiário'),
+    ]
+
+    processo = models.ForeignKey(
+        Processo,
+        on_delete=models.CASCADE,
+        related_name='responsaveis',
+        verbose_name='Processo',
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='responsabilidades_processo',
+        limit_choices_to={'papel__in': ['advogado', 'administrador', 'estagiario']},
+        verbose_name='Usuário',
+    )
+    papel = models.CharField(max_length=20, choices=PAPEL_CHOICES, default='apoio', verbose_name='Papel')
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Responsável do Processo'
+        verbose_name_plural = 'Responsáveis do Processo'
+        ordering = ['-ativo', 'papel', '-criado_em']
+        constraints = [
+            models.UniqueConstraint(fields=['processo', 'usuario'], name='uniq_processo_usuario_responsavel'),
+        ]
+
+    def __str__(self):
+        return f'{self.usuario} - {self.processo.numero}'
+
+
+class ProcessoTarefa(models.Model):
+    STATUS_CHOICES = [
+        ('pendente', 'Pendente'),
+        ('em_andamento', 'Em Andamento'),
+        ('concluida', 'Concluída'),
+        ('cancelada', 'Cancelada'),
+    ]
+    PRIORIDADE_CHOICES = [
+        ('baixa', 'Baixa'),
+        ('media', 'Média'),
+        ('alta', 'Alta'),
+        ('urgente', 'Urgente'),
+    ]
+
+    processo = models.ForeignKey(
+        Processo,
+        on_delete=models.CASCADE,
+        related_name='tarefas',
+        verbose_name='Processo',
+    )
+    titulo = models.CharField(max_length=220, verbose_name='Título')
+    descricao = models.TextField(blank=True, null=True, verbose_name='Descrição')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pendente', verbose_name='Status')
+    prioridade = models.CharField(max_length=20, choices=PRIORIDADE_CHOICES, default='media', verbose_name='Prioridade')
+    prazo_em = models.DateTimeField(blank=True, null=True, verbose_name='Prazo')
+    concluido_em = models.DateTimeField(blank=True, null=True, verbose_name='Concluído em')
+    responsavel = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tarefas_processo_responsavel',
+        limit_choices_to={'papel__in': ['advogado', 'administrador', 'estagiario']},
+        verbose_name='Responsável',
+    )
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tarefas_processo_criadas',
+        verbose_name='Criado por',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Tarefa de Processo'
+        verbose_name_plural = 'Tarefas de Processo'
+        ordering = ['status', 'prazo_em', '-criado_em']
+
+    def __str__(self):
+        return f'{self.titulo} - {self.processo.numero}'
+
+
+class DocumentoTemplate(models.Model):
+    TIPO_ALVO_CHOICES = [
+        ('cliente', 'Cliente'),
+        ('processo', 'Processo'),
+    ]
+
+    nome = models.CharField(max_length=150, verbose_name='Nome')
+    tipo_alvo = models.CharField(max_length=20, choices=TIPO_ALVO_CHOICES, verbose_name='Tipo de Alvo')
+    descricao = models.TextField(blank=True, null=True, verbose_name='Descrição')
+    conteudo_base = models.TextField(blank=True, null=True, verbose_name='Conteúdo Base')
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='templates_documento_criados',
+        verbose_name='Criado por',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Template de Documento'
+        verbose_name_plural = 'Templates de Documento'
+        ordering = ['tipo_alvo', 'nome']
+        constraints = [
+            models.UniqueConstraint(fields=['tipo_alvo', 'nome'], name='uniq_template_documento_alvo_nome'),
+        ]
+
+    def __str__(self):
+        return f'{self.get_tipo_alvo_display()} - {self.nome}'
+
+
 class ProcessoArquivo(models.Model):
     processo = models.ForeignKey(
         Processo,
@@ -329,6 +511,21 @@ class ProcessoArquivo(models.Model):
     )
     arquivo = models.FileField(upload_to='processos/arquivos/', verbose_name='Arquivo')
     nome_original = models.CharField(max_length=255, blank=True, verbose_name='Nome Original')
+    titulo = models.CharField(max_length=220, blank=True, null=True, verbose_name='Título')
+    documento_referencia = models.CharField(max_length=160, blank=True, null=True, verbose_name='Referência do Documento')
+    versao = models.PositiveIntegerField(default=1, verbose_name='Versão')
+    template = models.ForeignKey(
+        DocumentoTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='arquivos_processo',
+        limit_choices_to={'tipo_alvo': 'processo'},
+        verbose_name='Template',
+    )
+    template_nome = models.CharField(max_length=150, blank=True, null=True, verbose_name='Nome do Template')
+    categoria = models.CharField(max_length=120, blank=True, null=True, verbose_name='Categoria')
+    descricao = models.TextField(blank=True, null=True, verbose_name='Descrição')
     enviado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -357,6 +554,21 @@ class ClienteArquivo(models.Model):
     )
     arquivo = models.FileField(upload_to='clientes/arquivos/', verbose_name='Arquivo')
     nome_original = models.CharField(max_length=255, blank=True, verbose_name='Nome Original')
+    titulo = models.CharField(max_length=220, blank=True, null=True, verbose_name='Título')
+    documento_referencia = models.CharField(max_length=160, blank=True, null=True, verbose_name='Referência do Documento')
+    versao = models.PositiveIntegerField(default=1, verbose_name='Versão')
+    template = models.ForeignKey(
+        DocumentoTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='arquivos_cliente',
+        limit_choices_to={'tipo_alvo': 'cliente'},
+        verbose_name='Template',
+    )
+    template_nome = models.CharField(max_length=150, blank=True, null=True, verbose_name='Nome do Template')
+    categoria = models.CharField(max_length=120, blank=True, null=True, verbose_name='Categoria')
+    descricao = models.TextField(blank=True, null=True, verbose_name='Descrição')
     enviado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

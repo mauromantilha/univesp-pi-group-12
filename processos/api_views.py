@@ -3,9 +3,11 @@ from rest_framework.decorators import action
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
-from django.db.models import Q
+from django.db.models import Q, Max
 from django.utils import timezone
 from accounts.permissions import IsAdvogadoOuAdministradorWrite
+from agenda.models import Compromisso
+from agenda.serializers import CompromissoSerializer
 from .models import (
     Comarca,
     Vara,
@@ -15,6 +17,10 @@ from .models import (
     ClienteTarefa,
     ClienteContrato,
     Processo,
+    ProcessoParte,
+    ProcessoResponsavel,
+    ProcessoTarefa,
+    DocumentoTemplate,
     Movimentacao,
     ClienteArquivo,
     ProcessoArquivo,
@@ -24,7 +30,15 @@ from .serializers import (
     ClienteSerializer, ProcessoSerializer, ProcessoListSerializer,
     MovimentacaoSerializer, ClienteArquivoSerializer, ProcessoArquivoSerializer,
     ClienteAutomacaoSerializer, ClienteTarefaSerializer, ClienteContratoSerializer,
+    ProcessoParteSerializer, ProcessoResponsavelSerializer, ProcessoTarefaSerializer,
+    DocumentoTemplateSerializer,
 )
+
+WORKFLOW_ETAPAS = {
+    'contencioso': ['triagem', 'estrategia', 'instrucao', 'negociacao', 'execucao', 'encerramento'],
+    'consultivo': ['triagem', 'estrategia', 'negociacao', 'execucao', 'encerramento'],
+    'massificado': ['triagem', 'instrucao', 'monitoramento', 'execucao', 'encerramento'],
+}
 
 
 class IsAdminForWrite(permissions.BasePermission):
@@ -72,7 +86,9 @@ class ClienteViewSet(viewsets.ModelViewSet):
         if self.request.user.is_administrador():
             return queryset
         return queryset.filter(
-            Q(processos__advogado=self.request.user) | Q(responsavel=self.request.user)
+            Q(processos__advogado=self.request.user)
+            | Q(processos__responsaveis__usuario=self.request.user, processos__responsaveis__ativo=True)
+            | Q(responsavel=self.request.user)
         ).distinct()
 
     def perform_create(self, serializer):
@@ -83,7 +99,13 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         if self.request.user.is_administrador():
-            serializer.save()
+            processo = serializer.save()
+            if processo.advogado_id:
+                ProcessoResponsavel.objects.get_or_create(
+                    processo=processo,
+                    usuario_id=processo.advogado_id,
+                    defaults={'papel': 'principal', 'ativo': True},
+                )
             return
         responsavel = serializer.validated_data.get('responsavel')
         lead_responsavel = serializer.validated_data.get('lead_responsavel')
@@ -112,7 +134,18 @@ class ClienteViewSet(viewsets.ModelViewSet):
     def arquivos(self, request, pk=None):
         cliente = self.get_object()
         if request.method == 'GET':
-            qs = cliente.arquivos.select_related('enviado_por').all()
+            qs = cliente.arquivos.select_related('enviado_por', 'template').all()
+            termo = request.query_params.get('q')
+            if termo:
+                qs = qs.filter(
+                    Q(nome_original__icontains=termo)
+                    | Q(titulo__icontains=termo)
+                    | Q(documento_referencia__icontains=termo)
+                    | Q(template_nome__icontains=termo)
+                    | Q(template__nome__icontains=termo)
+                    | Q(categoria__icontains=termo)
+                    | Q(descricao__icontains=termo)
+                )
             serializer = ClienteArquivoSerializer(qs, many=True, context={'request': request})
             return Response(serializer.data)
 
@@ -126,16 +159,60 @@ class ClienteViewSet(viewsets.ModelViewSet):
             )
 
         criados = []
+        template_obj = None
+        template_id = request.data.get('template')
+        if template_id:
+            try:
+                template_obj = DocumentoTemplate.objects.get(pk=template_id, tipo_alvo='cliente', ativo=True)
+            except DocumentoTemplate.DoesNotExist:
+                return Response({'detail': 'Template de cliente não encontrado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        titulo = request.data.get('titulo')
+        documento_referencia = request.data.get('documento_referencia')
+        template_nome = request.data.get('template_nome')
+        categoria = request.data.get('categoria')
+        descricao = request.data.get('descricao')
+
         for arquivo in arquivos:
+            referencia = documento_referencia or arquivo.name
+            ultimo = (
+                cliente.arquivos.filter(documento_referencia=referencia)
+                .aggregate(maior=Max('versao'))
+                .get('maior')
+                or 0
+            )
             criados.append(
                 ClienteArquivo.objects.create(
                     cliente=cliente,
                     arquivo=arquivo,
                     nome_original=arquivo.name,
+                    titulo=titulo or arquivo.name,
+                    documento_referencia=referencia,
+                    versao=ultimo + 1,
+                    template=template_obj,
+                    template_nome=template_nome or (template_obj.nome if template_obj else None),
+                    categoria=categoria,
+                    descricao=descricao,
                     enviado_por=request.user,
                 )
             )
         serializer = ClienteArquivoSerializer(criados, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get', 'post'], url_path='documentos-templates')
+    def documentos_templates(self, request):
+        if request.method == 'GET':
+            qs = DocumentoTemplate.objects.filter(tipo_alvo='cliente', ativo=True).order_by('nome')
+            serializer = DocumentoTemplateSerializer(qs, many=True)
+            return Response(serializer.data)
+
+        if not request.user.is_administrador():
+            raise PermissionDenied('Somente administradores podem cadastrar templates.')
+        payload = request.data.copy()
+        payload['tipo_alvo'] = 'cliente'
+        serializer = DocumentoTemplateSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(criado_por=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['get', 'patch'], url_path='pipeline')
@@ -293,17 +370,25 @@ class ClienteViewSet(viewsets.ModelViewSet):
 class ProcessoViewSet(viewsets.ModelViewSet):
     queryset = Processo.objects.select_related(
         'cliente', 'advogado', 'tipo', 'vara', 'vara__comarca'
-    ).prefetch_related('movimentacoes').all()
+    ).prefetch_related(
+        'movimentacoes',
+        'partes',
+        'responsaveis__usuario',
+        'tarefas__responsavel',
+    ).all()
     permission_classes = [IsAdvogadoOuAdministradorWrite]
     search_fields = ['numero', 'cliente__nome', 'objeto']
-    ordering_fields = ['criado_em', 'numero']
+    ordering_fields = ['criado_em', 'numero', 'status', 'tipo_caso', 'etapa_workflow']
 
     def get_queryset(self):
         queryset = super().get_queryset()
         if self.request.user.is_administrador():
             queryset_base = queryset
         else:
-            queryset_base = queryset.filter(advogado=self.request.user)
+            queryset_base = queryset.filter(
+                Q(advogado=self.request.user)
+                | Q(responsaveis__usuario=self.request.user, responsaveis__ativo=True)
+            ).distinct()
 
         status_filtro = self.request.query_params.get('status')
         if status_filtro:
@@ -313,6 +398,10 @@ class ProcessoViewSet(viewsets.ModelViewSet):
         if cliente_id:
             queryset_base = queryset_base.filter(cliente_id=cliente_id)
 
+        tipo_caso = self.request.query_params.get('tipo_caso')
+        if tipo_caso:
+            queryset_base = queryset_base.filter(tipo_caso=tipo_caso)
+
         return queryset_base
 
     def get_serializer_class(self):
@@ -320,28 +409,53 @@ class ProcessoViewSet(viewsets.ModelViewSet):
             return ProcessoListSerializer
         return ProcessoSerializer
 
+    def _is_admin_or_principal(self, processo):
+        return self.request.user.is_administrador() or processo.advogado_id == self.request.user.id
+
+    def _is_responsavel_do_processo(self, processo):
+        if self._is_admin_or_principal(processo):
+            return True
+        return processo.responsaveis.filter(usuario=self.request.user, ativo=True).exists()
+
+    def _workflow_etapas_para(self, tipo_caso):
+        return WORKFLOW_ETAPAS.get(tipo_caso, WORKFLOW_ETAPAS['contencioso'])
+
     def _cliente_disponivel_para_usuario(self, cliente):
         if self.request.user.is_administrador():
             return True
         return (
-            cliente.processos.filter(advogado=self.request.user).exists()
+            cliente.processos.filter(
+                Q(advogado=self.request.user)
+                | Q(responsaveis__usuario=self.request.user, responsaveis__ativo=True)
+            ).exists()
             or cliente.responsavel_id == self.request.user.id
         )
 
     def perform_create(self, serializer):
         if self.request.user.is_administrador():
-            serializer.save()
+            processo = serializer.save()
+            if processo.advogado_id:
+                ProcessoResponsavel.objects.get_or_create(
+                    processo=processo,
+                    usuario_id=processo.advogado_id,
+                    defaults={'papel': 'principal', 'ativo': True},
+                )
             return
         cliente = serializer.validated_data['cliente']
         if not self._cliente_disponivel_para_usuario(cliente):
             raise PermissionDenied('Cliente não disponível para seu perfil.')
-        serializer.save(advogado=self.request.user)
+        processo = serializer.save(advogado=self.request.user)
+        ProcessoResponsavel.objects.get_or_create(
+            processo=processo,
+            usuario=self.request.user,
+            defaults={'papel': 'principal', 'ativo': True},
+        )
 
     def perform_update(self, serializer):
         if self.request.user.is_administrador():
             serializer.save()
             return
-        if serializer.instance.advogado_id != self.request.user.id:
+        if not self._is_admin_or_principal(serializer.instance):
             raise PermissionDenied('Você não tem permissão para editar este processo.')
         cliente = serializer.validated_data.get('cliente', serializer.instance.cliente)
         if not self._cliente_disponivel_para_usuario(cliente):
@@ -385,6 +499,8 @@ class ProcessoViewSet(viewsets.ModelViewSet):
     def adicionar_movimentacao(self, request, pk=None):
         """Adiciona uma movimentação ao processo"""
         processo = self.get_object()
+        if not self._is_responsavel_do_processo(processo):
+            raise PermissionDenied('Você não pode adicionar movimentação neste processo.')
         data = {**request.data, 'processo': processo.id, 'autor': request.user.id}
         serializer = MovimentacaoSerializer(data=data)
         if serializer.is_valid():
@@ -392,11 +508,232 @@ class ProcessoViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
 
+    @action(detail=True, methods=['get', 'patch'], url_path='workflow')
+    def workflow(self, request, pk=None):
+        processo = self.get_object()
+        if request.method == 'GET':
+            return Response({
+                'tipo_caso': processo.tipo_caso,
+                'tipo_caso_display': processo.get_tipo_caso_display(),
+                'etapa_workflow': processo.etapa_workflow,
+                'etapa_workflow_display': processo.get_etapa_workflow_display(),
+                'etapas_disponiveis': self._workflow_etapas_para(processo.tipo_caso),
+            })
+
+        if not self._is_admin_or_principal(processo):
+            raise PermissionDenied('Somente responsável principal pode alterar workflow.')
+
+        tipo_caso = request.data.get('tipo_caso', processo.tipo_caso)
+        if tipo_caso not in WORKFLOW_ETAPAS:
+            return Response(
+                {'detail': 'Tipo de caso inválido.', 'tipos_disponiveis': list(WORKFLOW_ETAPAS.keys())},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        etapa_workflow = request.data.get('etapa_workflow', processo.etapa_workflow)
+        etapas_validas = self._workflow_etapas_para(tipo_caso)
+        if etapa_workflow not in etapas_validas:
+            return Response(
+                {
+                    'detail': 'Etapa inválida para o tipo de caso informado.',
+                    'tipo_caso': tipo_caso,
+                    'etapas_disponiveis': etapas_validas,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        processo.tipo_caso = tipo_caso
+        processo.etapa_workflow = etapa_workflow
+        processo.save(update_fields=['tipo_caso', 'etapa_workflow', 'atualizado_em'])
+        serializer = self.get_serializer(processo)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'post'], url_path='partes')
+    def partes(self, request, pk=None):
+        processo = self.get_object()
+        if request.method == 'GET':
+            qs = processo.partes.all().order_by('nome')
+            serializer = ProcessoParteSerializer(qs, many=True)
+            return Response(serializer.data)
+
+        if not self._is_responsavel_do_processo(processo):
+            raise PermissionDenied('Você não pode cadastrar partes neste processo.')
+        payload = {**request.data, 'processo': processo.id}
+        serializer = ProcessoParteSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['patch', 'delete'], url_path=r'partes/(?P<parte_id>[^/.]+)')
+    def gerenciar_parte(self, request, pk=None, parte_id=None):
+        processo = self.get_object()
+        if not self._is_responsavel_do_processo(processo):
+            raise PermissionDenied('Você não pode alterar partes neste processo.')
+        try:
+            parte = processo.partes.get(pk=parte_id)
+        except ProcessoParte.DoesNotExist:
+            return Response({'detail': 'Parte não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.method == 'DELETE':
+            parte.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        serializer = ProcessoParteSerializer(parte, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'post'], url_path='responsaveis')
+    def responsaveis(self, request, pk=None):
+        processo = self.get_object()
+        if request.method == 'GET':
+            qs = processo.responsaveis.select_related('usuario').all()
+            serializer = ProcessoResponsavelSerializer(qs, many=True)
+            return Response(serializer.data)
+
+        if not self._is_admin_or_principal(processo):
+            raise PermissionDenied('Somente responsável principal pode gerenciar equipe do processo.')
+
+        usuario_id = request.data.get('usuario')
+        if not usuario_id:
+            return Response({'detail': 'Campo "usuario" é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+        existente = processo.responsaveis.filter(usuario_id=usuario_id).first()
+        payload = {**request.data, 'processo': processo.id}
+        if existente:
+            serializer = ProcessoResponsavelSerializer(existente, data=payload, partial=True)
+        else:
+            serializer = ProcessoResponsavelSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        code = status.HTTP_200_OK if existente else status.HTTP_201_CREATED
+        return Response(serializer.data, status=code)
+
+    @action(detail=True, methods=['patch', 'delete'], url_path=r'responsaveis/(?P<responsavel_id>[^/.]+)')
+    def gerenciar_responsavel(self, request, pk=None, responsavel_id=None):
+        processo = self.get_object()
+        if not self._is_admin_or_principal(processo):
+            raise PermissionDenied('Somente responsável principal pode gerenciar equipe do processo.')
+        try:
+            responsavel = processo.responsaveis.get(pk=responsavel_id)
+        except ProcessoResponsavel.DoesNotExist:
+            return Response({'detail': 'Responsável não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.method == 'DELETE':
+            if responsavel.usuario_id == processo.advogado_id:
+                return Response(
+                    {'detail': 'Não é permitido remover o responsável principal do processo.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            responsavel.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        serializer = ProcessoResponsavelSerializer(responsavel, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'post'], url_path='tarefas')
+    def tarefas(self, request, pk=None):
+        processo = self.get_object()
+        if request.method == 'GET':
+            qs = processo.tarefas.select_related('responsavel', 'criado_por').all()
+            serializer = ProcessoTarefaSerializer(qs, many=True)
+            return Response(serializer.data)
+
+        if not self._is_responsavel_do_processo(processo):
+            raise PermissionDenied('Você não pode criar tarefas neste processo.')
+        payload = {**request.data, 'processo': processo.id}
+        serializer = ProcessoTarefaSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+
+        if not self._is_admin_or_principal(processo):
+            responsavel = serializer.validated_data.get('responsavel')
+            if responsavel and responsavel.id != request.user.id:
+                raise PermissionDenied('Você só pode atribuir tarefas para si neste processo.')
+            serializer.save(criado_por=request.user, responsavel=request.user)
+        else:
+            serializer.save(criado_por=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path=r'tarefas/(?P<tarefa_id>[^/.]+)/concluir')
+    def concluir_tarefa(self, request, pk=None, tarefa_id=None):
+        processo = self.get_object()
+        try:
+            tarefa = processo.tarefas.get(pk=tarefa_id)
+        except ProcessoTarefa.DoesNotExist:
+            return Response({'detail': 'Tarefa não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not (
+            self._is_admin_or_principal(processo)
+            or tarefa.responsavel_id == request.user.id
+        ):
+            raise PermissionDenied('Você não pode concluir esta tarefa.')
+
+        tarefa.status = 'concluida'
+        tarefa.concluido_em = timezone.now()
+        tarefa.save(update_fields=['status', 'concluido_em', 'atualizado_em'])
+        serializer = ProcessoTarefaSerializer(tarefa)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'post'], url_path='prazos')
+    def prazos(self, request, pk=None):
+        processo = self.get_object()
+        if request.method == 'GET':
+            qs = processo.compromissos.filter(tipo='prazo').select_related('advogado').order_by('data', 'hora')
+            serializer = CompromissoSerializer(qs, many=True)
+            return Response(serializer.data)
+
+        if not self._is_responsavel_do_processo(processo):
+            raise PermissionDenied('Você não pode cadastrar prazos neste processo.')
+
+        payload = request.data.copy()
+        payload['processo'] = processo.id
+        payload['tipo'] = 'prazo'
+        if not payload.get('titulo'):
+            payload['titulo'] = f'Prazo - {processo.numero}'
+        if self.request.user.is_administrador():
+            payload['advogado'] = payload.get('advogado') or processo.advogado_id or request.user.id
+        else:
+            payload['advogado'] = request.user.id
+
+        serializer = CompromissoSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path=r'prazos/(?P<prazo_id>[^/.]+)/concluir')
+    def concluir_prazo(self, request, pk=None, prazo_id=None):
+        processo = self.get_object()
+        try:
+            prazo = processo.compromissos.get(pk=prazo_id, tipo='prazo')
+        except Compromisso.DoesNotExist:
+            return Response({'detail': 'Prazo não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not (
+            self._is_admin_or_principal(processo)
+            or prazo.advogado_id == request.user.id
+        ):
+            raise PermissionDenied('Você não pode concluir este prazo.')
+
+        prazo.status = 'concluido'
+        prazo.save(update_fields=['status'])
+        serializer = CompromissoSerializer(prazo)
+        return Response(serializer.data)
+
     @action(detail=True, methods=['get', 'post'], url_path='arquivos')
     def arquivos(self, request, pk=None):
         processo = self.get_object()
         if request.method == 'GET':
-            qs = processo.arquivos.select_related('enviado_por').all()
+            qs = processo.arquivos.select_related('enviado_por', 'template').all()
+            termo = request.query_params.get('q')
+            if termo:
+                qs = qs.filter(
+                    Q(nome_original__icontains=termo)
+                    | Q(titulo__icontains=termo)
+                    | Q(documento_referencia__icontains=termo)
+                    | Q(template_nome__icontains=termo)
+                    | Q(template__nome__icontains=termo)
+                    | Q(categoria__icontains=termo)
+                    | Q(descricao__icontains=termo)
+                )
             serializer = ProcessoArquivoSerializer(qs, many=True, context={'request': request})
             return Response(serializer.data)
 
@@ -410,16 +747,60 @@ class ProcessoViewSet(viewsets.ModelViewSet):
             )
 
         criados = []
+        template_obj = None
+        template_id = request.data.get('template')
+        if template_id:
+            try:
+                template_obj = DocumentoTemplate.objects.get(pk=template_id, tipo_alvo='processo', ativo=True)
+            except DocumentoTemplate.DoesNotExist:
+                return Response({'detail': 'Template de processo não encontrado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        titulo = request.data.get('titulo')
+        documento_referencia = request.data.get('documento_referencia')
+        template_nome = request.data.get('template_nome')
+        categoria = request.data.get('categoria')
+        descricao = request.data.get('descricao')
+
         for arquivo in arquivos:
+            referencia = documento_referencia or arquivo.name
+            ultimo = (
+                processo.arquivos.filter(documento_referencia=referencia)
+                .aggregate(maior=Max('versao'))
+                .get('maior')
+                or 0
+            )
             criados.append(
                 ProcessoArquivo.objects.create(
                     processo=processo,
                     arquivo=arquivo,
                     nome_original=arquivo.name,
+                    titulo=titulo or arquivo.name,
+                    documento_referencia=referencia,
+                    versao=ultimo + 1,
+                    template=template_obj,
+                    template_nome=template_nome or (template_obj.nome if template_obj else None),
+                    categoria=categoria,
+                    descricao=descricao,
                     enviado_por=request.user,
                 )
             )
         serializer = ProcessoArquivoSerializer(criados, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get', 'post'], url_path='documentos-templates')
+    def documentos_templates(self, request):
+        if request.method == 'GET':
+            qs = DocumentoTemplate.objects.filter(tipo_alvo='processo', ativo=True).order_by('nome')
+            serializer = DocumentoTemplateSerializer(qs, many=True)
+            return Response(serializer.data)
+
+        if not request.user.is_administrador():
+            raise PermissionDenied('Somente administradores podem cadastrar templates.')
+        payload = request.data.copy()
+        payload['tipo_alvo'] = 'processo'
+        serializer = DocumentoTemplateSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(criado_por=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -432,16 +813,25 @@ class MovimentacaoViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         if self.request.user.is_administrador():
             return queryset
-        return queryset.filter(processo__advogado=self.request.user)
+        return queryset.filter(
+            Q(processo__advogado=self.request.user)
+            | Q(processo__responsaveis__usuario=self.request.user, processo__responsaveis__ativo=True)
+        ).distinct()
 
     def perform_create(self, serializer):
         processo = serializer.validated_data['processo']
-        if not self.request.user.is_administrador() and processo.advogado_id != self.request.user.id:
+        if not self.request.user.is_administrador() and not (
+            processo.advogado_id == self.request.user.id
+            or processo.responsaveis.filter(usuario=self.request.user, ativo=True).exists()
+        ):
             raise PermissionDenied('Você não pode registrar movimentações neste processo.')
         serializer.save(autor=self.request.user)
 
     def perform_update(self, serializer):
         processo = serializer.validated_data.get('processo', serializer.instance.processo)
-        if not self.request.user.is_administrador() and processo.advogado_id != self.request.user.id:
+        if not self.request.user.is_administrador() and not (
+            processo.advogado_id == self.request.user.id
+            or processo.responsaveis.filter(usuario=self.request.user, ativo=True).exists()
+        ):
             raise PermissionDenied('Você não pode editar movimentações deste processo.')
         serializer.save(autor=self.request.user)

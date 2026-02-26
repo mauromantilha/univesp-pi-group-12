@@ -69,9 +69,17 @@ def dashboard(request):
         clientes_qs = Cliente.objects.all()
         compromissos_qs = Compromisso.objects.select_related('advogado', 'processo').all()
     else:
-        processos_qs = Processo.objects.select_related('cliente', 'advogado', 'tipo').filter(advogado=usuario)
-        clientes_qs = Cliente.objects.filter(processos__advogado=usuario).distinct()
-        compromissos_qs = Compromisso.objects.select_related('advogado', 'processo').filter(advogado=usuario)
+        processos_qs = Processo.objects.select_related('cliente', 'advogado', 'tipo').filter(
+            Q(advogado=usuario) | Q(responsaveis__usuario=usuario, responsaveis__ativo=True)
+        ).distinct()
+        clientes_qs = Cliente.objects.filter(
+            Q(processos__advogado=usuario)
+            | Q(processos__responsaveis__usuario=usuario, processos__responsaveis__ativo=True)
+        ).distinct()
+        compromissos_qs = Compromisso.objects.select_related('advogado', 'processo').filter(
+            Q(advogado=usuario)
+            | Q(processo__responsaveis__usuario=usuario, processo__responsaveis__ativo=True)
+        ).distinct()
 
     total_processos = processos_qs.count()
     total_clientes = clientes_qs.count()
@@ -211,10 +219,17 @@ def _contexto_portal(usuario_alvo=None):
         titulo = 'Portal Administrativo'
         subtitulo = 'Visão consolidada do escritório'
     else:
-        processos_qs = Processo.objects.select_related('cliente', 'advogado', 'tipo').filter(advogado=usuario_alvo)
-        compromissos_qs = Compromisso.objects.select_related('advogado', 'processo').filter(advogado=usuario_alvo)
+        processos_qs = Processo.objects.select_related('cliente', 'advogado', 'tipo').filter(
+            Q(advogado=usuario_alvo) | Q(responsaveis__usuario=usuario_alvo, responsaveis__ativo=True)
+        ).distinct()
+        compromissos_qs = Compromisso.objects.select_related('advogado', 'processo').filter(
+            Q(advogado=usuario_alvo)
+            | Q(processo__responsaveis__usuario=usuario_alvo, processo__responsaveis__ativo=True)
+        ).distinct()
         lancamentos_qs = Lancamento.objects.select_related('cliente', 'processo', 'criado_por').filter(
-            Q(criado_por=usuario_alvo) | Q(processo__advogado=usuario_alvo)
+            Q(criado_por=usuario_alvo)
+            | Q(processo__advogado=usuario_alvo)
+            | Q(processo__responsaveis__usuario=usuario_alvo, processo__responsaveis__ativo=True)
         ).distinct()
         nome = usuario_alvo.get_full_name() or usuario_alvo.username
         titulo = f'Portal de {nome}'

@@ -1,4 +1,5 @@
 from django.urls import reverse
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -277,3 +278,144 @@ class ProcessosApiPermissoesTest(APITestCase):
         )
         self.assertEqual(response_assinado.status_code, status.HTTP_200_OK)
         self.assertEqual(response_assinado.data['status_assinatura'], 'assinado')
+
+    def test_fluxo_processo_workflow_partes_tarefas_prazos_responsaveis(self):
+        self.client.force_authenticate(user=self.adv1)
+
+        response_workflow = self.client.patch(
+            reverse('processo-workflow', args=[self.processo_adv1.pk]),
+            {'tipo_caso': 'consultivo', 'etapa_workflow': 'negociacao'},
+            format='json',
+        )
+        self.assertEqual(response_workflow.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_workflow.data['tipo_caso'], 'consultivo')
+
+        response_parte = self.client.post(
+            reverse('processo-partes', args=[self.processo_adv1.pk]),
+            {'tipo_parte': 'reu', 'nome': 'Empresa Ré Teste', 'documento': '11.111.111/0001-11'},
+            format='json',
+        )
+        self.assertEqual(response_parte.status_code, status.HTTP_201_CREATED)
+
+        response_responsavel = self.client.post(
+            reverse('processo-responsaveis', args=[self.processo_adv1.pk]),
+            {'usuario': self.adv2.pk, 'papel': 'apoio'},
+            format='json',
+        )
+        self.assertIn(response_responsavel.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+
+        response_tarefa = self.client.post(
+            reverse('processo-tarefas', args=[self.processo_adv1.pk]),
+            {
+                'titulo': 'Revisar contrato',
+                'descricao': 'Analisar cláusulas críticas',
+                'prioridade': 'alta',
+                'responsavel': self.adv2.pk,
+            },
+            format='json',
+        )
+        self.assertEqual(response_tarefa.status_code, status.HTTP_201_CREATED)
+        tarefa_id = response_tarefa.data['id']
+
+        response_prazo = self.client.post(
+            reverse('processo-prazos', args=[self.processo_adv1.pk]),
+            {
+                'titulo': 'Prazo de manifestação',
+                'data': '2026-03-10',
+                'hora': '14:30:00',
+                'descricao': 'Manifestação final',
+                'alerta_dias_antes': 2,
+                'alerta_horas_antes': 6,
+            },
+            format='json',
+        )
+        self.assertEqual(response_prazo.status_code, status.HTTP_201_CREATED)
+        prazo_id = response_prazo.data['id']
+        self.assertEqual(response_prazo.data['alerta_dias_antes'], 2)
+        self.assertEqual(response_prazo.data['alerta_horas_antes'], 6)
+
+        response_concluir_tarefa = self.client.post(
+            reverse('processo-concluir-tarefa', args=[self.processo_adv1.pk, tarefa_id]),
+            {},
+            format='json',
+        )
+        self.assertEqual(response_concluir_tarefa.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_concluir_tarefa.data['status'], 'concluida')
+
+        response_concluir_prazo = self.client.post(
+            reverse('processo-concluir-prazo', args=[self.processo_adv1.pk, prazo_id]),
+            {},
+            format='json',
+        )
+        self.assertEqual(response_concluir_prazo.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_concluir_prazo.data['status'], 'concluido')
+
+        self.client.force_authenticate(user=self.adv2)
+        response_lista_processos_adv2 = self.client.get(reverse('processo-list'))
+        self.assertEqual(response_lista_processos_adv2.status_code, status.HTTP_200_OK)
+        ids = [item['id'] for item in response_lista_processos_adv2.data['results']]
+        self.assertIn(self.processo_adv1.pk, ids)
+
+    def test_responsavel_apoio_nao_gerencia_time_processo(self):
+        self.client.force_authenticate(user=self.adv1)
+        self.client.post(
+            reverse('processo-responsaveis', args=[self.processo_adv1.pk]),
+            {'usuario': self.adv2.pk, 'papel': 'apoio'},
+            format='json',
+        )
+
+        self.client.force_authenticate(user=self.adv2)
+        response = self.client.post(
+            reverse('processo-responsaveis', args=[self.processo_adv1.pk]),
+            {'usuario': self.admin.pk, 'papel': 'apoio'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_upload_documentos_cliente_com_versionamento_e_busca(self):
+        self.client.force_authenticate(user=self.admin)
+        response_template = self.client.post(
+            reverse('cliente-documentos-templates'),
+            {
+                'nome': 'Procuração PF',
+                'descricao': 'Template base de procuração pessoa física',
+                'conteudo_base': 'Conteúdo base',
+            },
+            format='json',
+        )
+        self.assertEqual(response_template.status_code, status.HTTP_201_CREATED)
+        template_id = response_template.data['id']
+
+        self.client.force_authenticate(user=self.adv1)
+        url_upload = reverse('cliente-arquivos', args=[self.cliente_adv1.pk])
+        arquivo_1 = SimpleUploadedFile('procuracao.pdf', b'PDF-v1', content_type='application/pdf')
+        response_upload_1 = self.client.post(
+            url_upload,
+            {
+                'arquivo': arquivo_1,
+                'template': template_id,
+                'documento_referencia': 'procuracao_cliente',
+                'categoria': 'mandato',
+            },
+            format='multipart',
+        )
+        self.assertEqual(response_upload_1.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response_upload_1.data[0]['versao'], 1)
+
+        arquivo_2 = SimpleUploadedFile('procuracao.pdf', b'PDF-v2', content_type='application/pdf')
+        response_upload_2 = self.client.post(
+            url_upload,
+            {
+                'arquivo': arquivo_2,
+                'template': template_id,
+                'documento_referencia': 'procuracao_cliente',
+                'categoria': 'mandato',
+            },
+            format='multipart',
+        )
+        self.assertEqual(response_upload_2.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response_upload_2.data[0]['versao'], 2)
+
+        response_busca = self.client.get(url_upload, {'q': 'procuracao_cliente'})
+        self.assertEqual(response_busca.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response_busca.data), 2)

@@ -17,12 +17,19 @@ const STATUS_BADGE = {
   arquivado: "badge-gray",
 };
 
+const TIPO_CASO_LABELS = {
+  contencioso: "Contencioso",
+  consultivo: "Consultivo",
+  massificado: "Massificado",
+};
+
 const EMPTY_FORM = {
   numero: "",
   cliente: "",
   tipo: "",
   vara: "",
   status: "em_andamento",
+  tipo_caso: "contencioso",
   valor_causa: "",
   objeto: "",
 };
@@ -105,6 +112,7 @@ export default function Processos() {
       tipo: Number(form.tipo),
       vara: form.vara ? Number(form.vara) : null,
       status: form.status,
+      tipo_caso: form.tipo_caso,
       valor_causa: form.valor_causa === "" ? null : form.valor_causa,
       objeto: form.objeto,
     };
@@ -155,6 +163,7 @@ export default function Processos() {
               <th className="th">Número</th>
               <th className="th">Cliente</th>
               <th className="th">Tipo</th>
+              <th className="th">Caso</th>
               <th className="th">Status</th>
               <th className="th">Valor</th>
               <th className="th">Ações</th>
@@ -163,11 +172,11 @@ export default function Processos() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="td text-center text-gray-400 py-8">Carregando...</td>
+                <td colSpan={7} className="td text-center text-gray-400 py-8">Carregando...</td>
               </tr>
             ) : processos.length === 0 ? (
               <tr>
-                <td colSpan={6} className="td text-center text-gray-400 py-8">Nenhum processo encontrado</td>
+                <td colSpan={7} className="td text-center text-gray-400 py-8">Nenhum processo encontrado</td>
               </tr>
             ) : (
               processos.map((p) => (
@@ -179,6 +188,7 @@ export default function Processos() {
                   </td>
                   <td className="td font-medium">{p.cliente_nome || "-"}</td>
                   <td className="td text-xs">{p.tipo_nome || "-"}</td>
+                  <td className="td text-xs">{p.tipo_caso_display || TIPO_CASO_LABELS[p.tipo_caso] || "-"}</td>
                   <td className="td">
                     <span className={STATUS_BADGE[p.status] || "badge-gray"}>
                       {p.status_display || STATUS_LABELS[p.status] || p.status}
@@ -266,6 +276,15 @@ export default function Processos() {
                     value={form.valor_causa}
                     onChange={(e) => setForm({ ...form, valor_causa: e.target.value })}
                   />
+                </div>
+
+                <div>
+                  <label className="label">Tipo de Caso</label>
+                  <select className="input" value={form.tipo_caso} onChange={(e) => setForm({ ...form, tipo_caso: e.target.value })}>
+                    {Object.entries(TIPO_CASO_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="md:col-span-2">

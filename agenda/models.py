@@ -34,6 +34,8 @@ class Compromisso(models.Model):
     )
     descricao = models.TextField(blank=True, verbose_name='Descrição')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pendente', verbose_name='Status')
+    alerta_dias_antes = models.PositiveSmallIntegerField(default=1, verbose_name='Dias de Antecedência do Alerta')
+    alerta_horas_antes = models.PositiveSmallIntegerField(default=0, verbose_name='Horas de Antecedência do Alerta')
     alerta_enviado = models.BooleanField(default=False)
     criado_em = models.DateTimeField(auto_now_add=True)
 

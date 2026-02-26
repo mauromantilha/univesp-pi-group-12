@@ -8,6 +8,10 @@ from .models import (
     ClienteTarefa,
     ClienteContrato,
     Processo,
+    ProcessoParte,
+    ProcessoResponsavel,
+    ProcessoTarefa,
+    DocumentoTemplate,
     Movimentacao,
     ClienteArquivo,
     ProcessoArquivo,
@@ -172,9 +176,94 @@ class ClienteContratoSerializer(serializers.ModelSerializer):
         return obj.arquivo.url
 
 
+class ProcessoParteSerializer(serializers.ModelSerializer):
+    tipo_parte_display = serializers.CharField(source='get_tipo_parte_display', read_only=True)
+
+    class Meta:
+        model = ProcessoParte
+        fields = [
+            'id',
+            'processo',
+            'tipo_parte',
+            'tipo_parte_display',
+            'nome',
+            'documento',
+            'observacoes',
+            'ativo',
+            'criado_em',
+        ]
+
+
+class ProcessoResponsavelSerializer(serializers.ModelSerializer):
+    papel_display = serializers.CharField(source='get_papel_display', read_only=True)
+    usuario_nome = serializers.CharField(source='usuario.get_full_name', read_only=True)
+
+    class Meta:
+        model = ProcessoResponsavel
+        fields = [
+            'id',
+            'processo',
+            'usuario',
+            'usuario_nome',
+            'papel',
+            'papel_display',
+            'ativo',
+            'criado_em',
+        ]
+
+
+class ProcessoTarefaSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    prioridade_display = serializers.CharField(source='get_prioridade_display', read_only=True)
+    responsavel_nome = serializers.CharField(source='responsavel.get_full_name', read_only=True)
+    criado_por_nome = serializers.CharField(source='criado_por.get_full_name', read_only=True)
+
+    class Meta:
+        model = ProcessoTarefa
+        fields = [
+            'id',
+            'processo',
+            'titulo',
+            'descricao',
+            'status',
+            'status_display',
+            'prioridade',
+            'prioridade_display',
+            'prazo_em',
+            'concluido_em',
+            'responsavel',
+            'responsavel_nome',
+            'criado_por',
+            'criado_por_nome',
+            'criado_em',
+            'atualizado_em',
+        ]
+
+
+class DocumentoTemplateSerializer(serializers.ModelSerializer):
+    tipo_alvo_display = serializers.CharField(source='get_tipo_alvo_display', read_only=True)
+    criado_por_nome = serializers.CharField(source='criado_por.get_full_name', read_only=True)
+
+    class Meta:
+        model = DocumentoTemplate
+        fields = [
+            'id',
+            'nome',
+            'tipo_alvo',
+            'tipo_alvo_display',
+            'descricao',
+            'conteudo_base',
+            'ativo',
+            'criado_por',
+            'criado_por_nome',
+            'criado_em',
+        ]
+
+
 class ClienteArquivoSerializer(serializers.ModelSerializer):
     arquivo_url = serializers.SerializerMethodField()
     enviado_por_nome = serializers.CharField(source='enviado_por.get_full_name', read_only=True)
+    template_nome_resolvido = serializers.SerializerMethodField()
 
     class Meta:
         model = ClienteArquivo
@@ -184,6 +273,14 @@ class ClienteArquivoSerializer(serializers.ModelSerializer):
             'arquivo',
             'arquivo_url',
             'nome_original',
+            'titulo',
+            'documento_referencia',
+            'versao',
+            'template',
+            'template_nome',
+            'template_nome_resolvido',
+            'categoria',
+            'descricao',
             'enviado_por',
             'enviado_por_nome',
             'criado_em',
@@ -196,6 +293,11 @@ class ClienteArquivoSerializer(serializers.ModelSerializer):
         if request:
             return request.build_absolute_uri(obj.arquivo.url)
         return obj.arquivo.url
+
+    def get_template_nome_resolvido(self, obj):
+        if obj.template:
+            return obj.template.nome
+        return obj.template_nome
 
 
 class MovimentacaoSerializer(serializers.ModelSerializer):
@@ -212,6 +314,8 @@ class ProcessoSerializer(serializers.ModelSerializer):
     tipo_nome = serializers.CharField(source='tipo.nome', read_only=True)
     vara_nome = serializers.CharField(source='vara.__str__', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    tipo_caso_display = serializers.CharField(source='get_tipo_caso_display', read_only=True)
+    etapa_workflow_display = serializers.CharField(source='get_etapa_workflow_display', read_only=True)
     movimentacoes = MovimentacaoSerializer(many=True, read_only=True)
     
     class Meta:
@@ -219,7 +323,10 @@ class ProcessoSerializer(serializers.ModelSerializer):
         fields = ['id', 'numero', 'cliente', 'cliente_nome',
                   'advogado', 'advogado_nome',
                   'tipo', 'tipo_nome', 'vara', 'vara_nome',
-                  'status', 'status_display', 'objeto', 'valor_causa',
+                  'status', 'status_display',
+                  'tipo_caso', 'tipo_caso_display',
+                  'etapa_workflow', 'etapa_workflow_display',
+                  'objeto', 'valor_causa',
                   'criado_em', 'atualizado_em',
                   'movimentacoes']
 
@@ -227,6 +334,7 @@ class ProcessoSerializer(serializers.ModelSerializer):
 class ProcessoArquivoSerializer(serializers.ModelSerializer):
     arquivo_url = serializers.SerializerMethodField()
     enviado_por_nome = serializers.CharField(source='enviado_por.get_full_name', read_only=True)
+    template_nome_resolvido = serializers.SerializerMethodField()
 
     class Meta:
         model = ProcessoArquivo
@@ -236,6 +344,14 @@ class ProcessoArquivoSerializer(serializers.ModelSerializer):
             'arquivo',
             'arquivo_url',
             'nome_original',
+            'titulo',
+            'documento_referencia',
+            'versao',
+            'template',
+            'template_nome',
+            'template_nome_resolvido',
+            'categoria',
+            'descricao',
             'enviado_por',
             'enviado_por_nome',
             'criado_em',
@@ -249,6 +365,11 @@ class ProcessoArquivoSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.arquivo.url)
         return obj.arquivo.url
 
+    def get_template_nome_resolvido(self, obj):
+        if obj.template:
+            return obj.template.nome
+        return obj.template_nome
+
 
 class ProcessoListSerializer(serializers.ModelSerializer):
     """Serializer simplificado para listagem"""
@@ -258,11 +379,15 @@ class ProcessoListSerializer(serializers.ModelSerializer):
     advogado_nome = serializers.CharField(source='advogado.get_full_name', read_only=True)
     tipo_nome = serializers.CharField(source='tipo.nome', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    tipo_caso_display = serializers.CharField(source='get_tipo_caso_display', read_only=True)
+    etapa_workflow_display = serializers.CharField(source='get_etapa_workflow_display', read_only=True)
     
     class Meta:
         model = Processo
         fields = ['id', 'numero', 'cliente', 'cliente_nome',
                   'tipo', 'tipo_nome', 'valor_causa', 'objeto', 'vara',
                   'advogado_nome',
+                  'tipo_caso', 'tipo_caso_display',
+                  'etapa_workflow', 'etapa_workflow_display',
                   'status', 'status_display',
                   'criado_em', 'atualizado_em']

@@ -17,10 +17,49 @@ const STATUS_LABELS = {
   arquivado: "Arquivado",
 };
 
-function toList(payload) {
-  if (Array.isArray(payload)) return payload;
-  return payload?.results || [];
-}
+const TIPO_CASO_LABELS = {
+  contencioso: "Contencioso",
+  consultivo: "Consultivo",
+  massificado: "Massificado",
+};
+
+const ETAPAS_WORKFLOW = {
+  contencioso: [
+    { value: "triagem", label: "Triagem" },
+    { value: "estrategia", label: "Estratégia" },
+    { value: "instrucao", label: "Instrução" },
+    { value: "negociacao", label: "Negociação" },
+    { value: "execucao", label: "Execução" },
+    { value: "encerramento", label: "Encerramento" },
+  ],
+  consultivo: [
+    { value: "triagem", label: "Triagem" },
+    { value: "estrategia", label: "Estratégia" },
+    { value: "negociacao", label: "Negociação" },
+    { value: "execucao", label: "Execução" },
+    { value: "encerramento", label: "Encerramento" },
+  ],
+  massificado: [
+    { value: "triagem", label: "Triagem" },
+    { value: "instrucao", label: "Instrução" },
+    { value: "monitoramento", label: "Monitoramento" },
+    { value: "execucao", label: "Execução" },
+    { value: "encerramento", label: "Encerramento" },
+  ],
+};
+
+const PRIORIDADE_TAREFA = {
+  baixa: "Baixa",
+  media: "Média",
+  alta: "Alta",
+  urgente: "Urgente",
+};
+
+const PAPEL_RESPONSAVEL = {
+  principal: "Principal",
+  apoio: "Apoio",
+  estagiario: "Estagiário",
+};
 
 const EMPTY_EDIT_FORM = {
   numero: "",
@@ -28,15 +67,78 @@ const EMPTY_EDIT_FORM = {
   tipo: "",
   vara: "",
   status: "em_andamento",
+  tipo_caso: "contencioso",
   valor_causa: "",
   objeto: "",
 };
 
+const EMPTY_PARTE_FORM = {
+  tipo_parte: "autor",
+  nome: "",
+  documento: "",
+  observacoes: "",
+};
+
+const EMPTY_RESP_FORM = {
+  usuario: "",
+  papel: "apoio",
+};
+
+const EMPTY_TAREFA_FORM = {
+  titulo: "",
+  descricao: "",
+  prioridade: "media",
+  prazo_em: "",
+  responsavel: "",
+};
+
+const EMPTY_PRAZO_FORM = {
+  titulo: "",
+  data: "",
+  hora: "",
+  descricao: "",
+  alerta_dias_antes: 1,
+  alerta_horas_antes: 0,
+};
+
+function toList(payload) {
+  if (Array.isArray(payload)) return payload;
+  return payload?.results || [];
+}
+
+function fmtDate(v) {
+  if (!v) return "-";
+  try {
+    return new Date(v).toLocaleString("pt-BR");
+  } catch {
+    return v;
+  }
+}
+
+function userLabel(user) {
+  if (!user) return "-";
+  const nome = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+  return nome || user.username || `Usuário #${user.id}`;
+}
+
 export default function ProcessoDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+
   const [processo, setProcesso] = useState(null);
   const [movs, setMovs] = useState([]);
+  const [partes, setPartes] = useState([]);
+  const [responsaveis, setResponsaveis] = useState([]);
+  const [tarefas, setTarefas] = useState([]);
+  const [prazos, setPrazos] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
+
+  const [workflowForm, setWorkflowForm] = useState({ tipo_caso: "contencioso", etapa_workflow: "triagem" });
+  const [parteForm, setParteForm] = useState(EMPTY_PARTE_FORM);
+  const [responsavelForm, setResponsavelForm] = useState(EMPTY_RESP_FORM);
+  const [tarefaForm, setTarefaForm] = useState(EMPTY_TAREFA_FORM);
+  const [prazoForm, setPrazoForm] = useState(EMPTY_PRAZO_FORM);
+
   const [analise, setAnalise] = useState(null);
   const [loadingAnalise, setLoadingAnalise] = useState(false);
   const [showMovModal, setShowMovModal] = useState(false);
@@ -58,8 +160,13 @@ export default function ProcessoDetail() {
       tipo: res.data.tipo || "",
       vara: res.data.vara || "",
       status: res.data.status || "em_andamento",
+      tipo_caso: res.data.tipo_caso || "contencioso",
       valor_causa: res.data.valor_causa || "",
       objeto: res.data.objeto || "",
+    });
+    setWorkflowForm({
+      tipo_caso: res.data.tipo_caso || "contencioso",
+      etapa_workflow: res.data.etapa_workflow || "triagem",
     });
   }
 
@@ -68,8 +175,36 @@ export default function ProcessoDetail() {
     setMovs(toList(res.data));
   }
 
+  async function carregarEstruturas() {
+    const [w, p, r, t, pr, u] = await Promise.all([
+      api.get(`/processos/${id}/workflow/`).catch(() => ({ data: null })),
+      api.get(`/processos/${id}/partes/`).catch(() => ({ data: [] })),
+      api.get(`/processos/${id}/responsaveis/`).catch(() => ({ data: [] })),
+      api.get(`/processos/${id}/tarefas/`).catch(() => ({ data: [] })),
+      api.get(`/processos/${id}/prazos/`).catch(() => ({ data: [] })),
+      api.get("/usuarios/?limit=400").catch(() => ({ data: [] })),
+    ]);
+
+    if (w.data) {
+      setWorkflowForm({
+        tipo_caso: w.data.tipo_caso || "contencioso",
+        etapa_workflow: w.data.etapa_workflow || "triagem",
+      });
+    }
+
+    setPartes(toList(p.data));
+    setResponsaveis(toList(r.data));
+    setTarefas(toList(t.data));
+    setPrazos(toList(pr.data));
+    setUsuarios(toList(u.data));
+  }
+
+  async function recarregarTudo() {
+    await Promise.all([carregarProcesso(), carregarMovimentacoes(), carregarEstruturas()]);
+  }
+
   useEffect(() => {
-    Promise.all([carregarProcesso(), carregarMovimentacoes()]).catch(() => {
+    recarregarTudo().catch(() => {
       toast.error("Processo não encontrado");
     });
   }, [id]);
@@ -106,6 +241,7 @@ export default function ProcessoDetail() {
       await api.post("/movimentacoes/", { ...movForm, processo: parseInt(id, 10) });
       toast.success("Movimentação adicionada");
       setShowMovModal(false);
+      setMovForm({ titulo: "", descricao: "", data: new Date().toISOString().slice(0, 10) });
       await carregarMovimentacoes();
     } catch {
       toast.error("Erro ao adicionar movimentação");
@@ -122,6 +258,7 @@ export default function ProcessoDetail() {
       tipo: Number(editForm.tipo),
       vara: editForm.vara ? Number(editForm.vara) : null,
       status: editForm.status,
+      tipo_caso: editForm.tipo_caso,
       valor_causa: editForm.valor_causa === "" ? null : editForm.valor_causa,
       objeto: editForm.objeto,
     };
@@ -132,6 +269,7 @@ export default function ProcessoDetail() {
       setProcesso(res.data);
       setShowEditModal(false);
       toast.success("Processo atualizado");
+      await carregarEstruturas();
     } catch (err) {
       const data = err.response?.data;
       toast.error(data ? JSON.stringify(data).slice(0, 180) : "Erro ao atualizar processo");
@@ -166,13 +304,144 @@ export default function ProcessoDetail() {
     }
   }
 
+  async function salvarWorkflow() {
+    if (!processo) return;
+    try {
+      const res = await api.patch(`/processos/${processo.id}/workflow/`, workflowForm);
+      setProcesso(res.data);
+      toast.success("Workflow atualizado");
+    } catch (err) {
+      const data = err.response?.data;
+      toast.error(data?.detail || "Falha ao atualizar workflow");
+    }
+  }
+
+  async function adicionarParte(e) {
+    e.preventDefault();
+    if (!processo) return;
+    if (!parteForm.nome.trim()) {
+      toast.error("Informe o nome da parte");
+      return;
+    }
+    try {
+      await api.post(`/processos/${processo.id}/partes/`, parteForm);
+      setParteForm(EMPTY_PARTE_FORM);
+      await carregarEstruturas();
+      toast.success("Parte cadastrada");
+    } catch {
+      toast.error("Erro ao cadastrar parte");
+    }
+  }
+
+  async function toggleParteAtiva(parte) {
+    if (!processo) return;
+    try {
+      await api.patch(`/processos/${processo.id}/partes/${parte.id}/`, { ativo: !parte.ativo });
+      await carregarEstruturas();
+    } catch {
+      toast.error("Falha ao atualizar parte");
+    }
+  }
+
+  async function adicionarResponsavel(e) {
+    e.preventDefault();
+    if (!processo) return;
+    if (!responsavelForm.usuario) {
+      toast.error("Selecione um usuário");
+      return;
+    }
+    try {
+      await api.post(`/processos/${processo.id}/responsaveis/`, {
+        usuario: Number(responsavelForm.usuario),
+        papel: responsavelForm.papel,
+      });
+      setResponsavelForm(EMPTY_RESP_FORM);
+      await carregarEstruturas();
+      toast.success("Responsável atualizado");
+    } catch {
+      toast.error("Erro ao atualizar responsáveis");
+    }
+  }
+
+  async function toggleResponsavelAtivo(item) {
+    if (!processo) return;
+    try {
+      await api.patch(`/processos/${processo.id}/responsaveis/${item.id}/`, { ativo: !item.ativo });
+      await carregarEstruturas();
+    } catch {
+      toast.error("Falha ao atualizar responsável");
+    }
+  }
+
+  async function adicionarTarefa(e) {
+    e.preventDefault();
+    if (!processo) return;
+    if (!tarefaForm.titulo.trim()) {
+      toast.error("Informe o título da tarefa");
+      return;
+    }
+    try {
+      const payload = {
+        ...tarefaForm,
+        responsavel: tarefaForm.responsavel ? Number(tarefaForm.responsavel) : null,
+        prazo_em: tarefaForm.prazo_em || null,
+      };
+      await api.post(`/processos/${processo.id}/tarefas/`, payload);
+      setTarefaForm(EMPTY_TAREFA_FORM);
+      await carregarEstruturas();
+      toast.success("Tarefa adicionada");
+    } catch {
+      toast.error("Erro ao cadastrar tarefa");
+    }
+  }
+
+  async function concluirTarefa(tarefa) {
+    if (!processo) return;
+    try {
+      await api.post(`/processos/${processo.id}/tarefas/${tarefa.id}/concluir/`);
+      await carregarEstruturas();
+      toast.success("Tarefa concluída");
+    } catch {
+      toast.error("Falha ao concluir tarefa");
+    }
+  }
+
+  async function adicionarPrazo(e) {
+    e.preventDefault();
+    if (!processo) return;
+    if (!prazoForm.data) {
+      toast.error("Informe a data do prazo");
+      return;
+    }
+    try {
+      await api.post(`/processos/${processo.id}/prazos/`, prazoForm);
+      setPrazoForm(EMPTY_PRAZO_FORM);
+      await carregarEstruturas();
+      toast.success("Prazo cadastrado");
+    } catch {
+      toast.error("Erro ao cadastrar prazo");
+    }
+  }
+
+  async function concluirPrazo(prazo) {
+    if (!processo) return;
+    try {
+      await api.post(`/processos/${processo.id}/prazos/${prazo.id}/concluir/`);
+      await carregarEstruturas();
+      toast.success("Prazo concluído");
+    } catch {
+      toast.error("Falha ao concluir prazo");
+    }
+  }
+
   if (!processo) return <div className="text-center py-20 text-gray-400">Carregando...</div>;
 
   const riscoCor = { baixo: "text-green-600", medio: "text-yellow-600", alto: "text-red-600" };
   const riscoIcon = { baixo: "🟢", medio: "🟡", alto: "🔴" };
+  const etapasOpcoes = ETAPAS_WORKFLOW[workflowForm.tipo_caso] || ETAPAS_WORKFLOW.contencioso;
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-5xl">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <button onClick={() => navigate("/processos")} className="hover:text-primary-600">Processos</button>
@@ -204,9 +473,11 @@ export default function ProcessoDetail() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-5 pt-5 border-t border-gray-100">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5 pt-5 border-t border-gray-100">
           <InfoItem label="Tipo" value={processo.tipo_nome || "-"} />
           <InfoItem label="Vara" value={processo.vara_nome || "-"} />
+          <InfoItem label="Tipo de Caso" value={processo.tipo_caso_display || TIPO_CASO_LABELS[processo.tipo_caso] || "-"} />
+          <InfoItem label="Workflow" value={processo.etapa_workflow_display || "-"} />
           <InfoItem
             label="Valor da Causa"
             value={
@@ -223,6 +494,235 @@ export default function ProcessoDetail() {
         <div className="mt-4 pt-4 border-t border-gray-100">
           <div className="text-xs text-gray-500 mb-1">Objeto / Descrição</div>
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{processo.objeto || "-"}</p>
+        </div>
+      </div>
+
+      <div className="card space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">Workflow do Caso</h2>
+          <button onClick={salvarWorkflow} className="btn-primary text-sm">Salvar Workflow</button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="label">Tipo de Caso</label>
+            <select
+              className="input"
+              value={workflowForm.tipo_caso}
+              onChange={(e) => {
+                const tipo = e.target.value;
+                const defaultEtapa = (ETAPAS_WORKFLOW[tipo] || [])[0]?.value || "triagem";
+                setWorkflowForm({ tipo_caso: tipo, etapa_workflow: defaultEtapa });
+              }}
+            >
+              {Object.entries(TIPO_CASO_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Etapa</label>
+            <select className="input" value={workflowForm.etapa_workflow} onChange={(e) => setWorkflowForm({ ...workflowForm, etapa_workflow: e.target.value })}>
+              {etapasOpcoes.map((etapa) => (
+                <option key={etapa.value} value={etapa.value}>{etapa.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="card space-y-4">
+          <h2 className="text-base font-semibold">Partes do Processo</h2>
+          <form onSubmit={adicionarParte} className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Tipo</label>
+                <select className="input" value={parteForm.tipo_parte} onChange={(e) => setParteForm({ ...parteForm, tipo_parte: e.target.value })}>
+                  <option value="autor">Autor</option>
+                  <option value="reu">Réu</option>
+                  <option value="terceiro">Terceiro</option>
+                  <option value="assistente">Assistente</option>
+                  <option value="testemunha">Testemunha</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">CPF/CNPJ</label>
+                <input className="input" value={parteForm.documento} onChange={(e) => setParteForm({ ...parteForm, documento: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <label className="label">Nome</label>
+              <input className="input" value={parteForm.nome} onChange={(e) => setParteForm({ ...parteForm, nome: e.target.value })} required />
+            </div>
+            <div>
+              <label className="label">Observações</label>
+              <textarea className="input" rows={2} value={parteForm.observacoes} onChange={(e) => setParteForm({ ...parteForm, observacoes: e.target.value })} />
+            </div>
+            <button type="submit" className="btn-secondary text-sm">+ Adicionar Parte</button>
+          </form>
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            {partes.length === 0 ? <p className="text-sm text-gray-400">Nenhuma parte cadastrada.</p> : partes.map((parte) => (
+              <div key={parte.id} className="rounded-lg border border-gray-200 p-2 text-sm flex items-center justify-between gap-2">
+                <div>
+                  <div className="font-medium">{parte.nome}</div>
+                  <div className="text-xs text-gray-500">{parte.tipo_parte_display || parte.tipo_parte} • {parte.documento || "Sem documento"}</div>
+                </div>
+                <button onClick={() => toggleParteAtiva(parte)} className="btn-secondary text-xs px-3 py-1">
+                  {parte.ativo ? "Inativar" : "Ativar"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card space-y-4">
+          <h2 className="text-base font-semibold">Responsáveis</h2>
+          <form onSubmit={adicionarResponsavel} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="md:col-span-2">
+              <label className="label">Usuário</label>
+              <select className="input" value={responsavelForm.usuario} onChange={(e) => setResponsavelForm({ ...responsavelForm, usuario: e.target.value })}>
+                <option value="">Selecione...</option>
+                {usuarios.map((u) => (
+                  <option key={u.id} value={u.id}>{userLabel(u)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Papel</label>
+              <select className="input" value={responsavelForm.papel} onChange={(e) => setResponsavelForm({ ...responsavelForm, papel: e.target.value })}>
+                <option value="principal">Principal</option>
+                <option value="apoio">Apoio</option>
+                <option value="estagiario">Estagiário</option>
+              </select>
+            </div>
+            <div className="md:col-span-3">
+              <button type="submit" className="btn-secondary text-sm">+ Vincular Responsável</button>
+            </div>
+          </form>
+
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            {responsaveis.length === 0 ? <p className="text-sm text-gray-400">Nenhum responsável vinculado.</p> : responsaveis.map((r) => (
+              <div key={r.id} className="rounded-lg border border-gray-200 p-2 text-sm flex items-center justify-between gap-2">
+                <div>
+                  <div className="font-medium">{r.usuario_nome || `Usuário #${r.usuario}`}</div>
+                  <div className="text-xs text-gray-500">{r.papel_display || PAPEL_RESPONSAVEL[r.papel] || r.papel}</div>
+                </div>
+                <button onClick={() => toggleResponsavelAtivo(r)} className="btn-secondary text-xs px-3 py-1">
+                  {r.ativo ? "Inativar" : "Ativar"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="card space-y-4">
+          <h2 className="text-base font-semibold">Tarefas do Processo</h2>
+          <form onSubmit={adicionarTarefa} className="space-y-3">
+            <div>
+              <label className="label">Título</label>
+              <input className="input" required value={tarefaForm.titulo} onChange={(e) => setTarefaForm({ ...tarefaForm, titulo: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="label">Prioridade</label>
+                <select className="input" value={tarefaForm.prioridade} onChange={(e) => setTarefaForm({ ...tarefaForm, prioridade: e.target.value })}>
+                  {Object.entries(PRIORIDADE_TAREFA).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Prazo</label>
+                <input className="input" type="datetime-local" value={tarefaForm.prazo_em} onChange={(e) => setTarefaForm({ ...tarefaForm, prazo_em: e.target.value })} />
+              </div>
+              <div>
+                <label className="label">Responsável</label>
+                <select className="input" value={tarefaForm.responsavel} onChange={(e) => setTarefaForm({ ...tarefaForm, responsavel: e.target.value })}>
+                  <option value="">Automático</option>
+                  {usuarios.map((u) => (
+                    <option key={u.id} value={u.id}>{userLabel(u)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="label">Descrição</label>
+              <textarea className="input" rows={2} value={tarefaForm.descricao} onChange={(e) => setTarefaForm({ ...tarefaForm, descricao: e.target.value })} />
+            </div>
+            <button type="submit" className="btn-secondary text-sm">+ Adicionar Tarefa</button>
+          </form>
+
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {tarefas.length === 0 ? <p className="text-sm text-gray-400">Nenhuma tarefa registrada.</p> : tarefas.map((t) => (
+              <div key={t.id} className="rounded-lg border border-gray-200 p-2 text-sm flex items-center justify-between gap-2">
+                <div>
+                  <div className="font-medium">{t.titulo}</div>
+                  <div className="text-xs text-gray-500">{t.prioridade_display || PRIORIDADE_TAREFA[t.prioridade] || t.prioridade} • {t.responsavel_nome || "Sem responsável"}</div>
+                  <div className="text-xs text-gray-400">Prazo: {fmtDate(t.prazo_em)}</div>
+                </div>
+                {t.status !== "concluida" ? (
+                  <button onClick={() => concluirTarefa(t)} className="btn-secondary text-xs px-3 py-1">Concluir</button>
+                ) : (
+                  <span className="badge-green">Concluída</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card space-y-4">
+          <h2 className="text-base font-semibold">Prazos e Lembretes</h2>
+          <form onSubmit={adicionarPrazo} className="space-y-3">
+            <div>
+              <label className="label">Título</label>
+              <input className="input" value={prazoForm.titulo} onChange={(e) => setPrazoForm({ ...prazoForm, titulo: e.target.value })} placeholder="Prazo - manifestação" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Data</label>
+                <input className="input" type="date" required value={prazoForm.data} onChange={(e) => setPrazoForm({ ...prazoForm, data: e.target.value })} />
+              </div>
+              <div>
+                <label className="label">Hora</label>
+                <input className="input" type="time" value={prazoForm.hora} onChange={(e) => setPrazoForm({ ...prazoForm, hora: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Lembrar (dias antes)</label>
+                <input className="input" type="number" min={0} value={prazoForm.alerta_dias_antes} onChange={(e) => setPrazoForm({ ...prazoForm, alerta_dias_antes: Number(e.target.value || 0) })} />
+              </div>
+              <div>
+                <label className="label">Lembrar (horas antes)</label>
+                <input className="input" type="number" min={0} value={prazoForm.alerta_horas_antes} onChange={(e) => setPrazoForm({ ...prazoForm, alerta_horas_antes: Number(e.target.value || 0) })} />
+              </div>
+            </div>
+            <div>
+              <label className="label">Descrição</label>
+              <textarea className="input" rows={2} value={prazoForm.descricao} onChange={(e) => setPrazoForm({ ...prazoForm, descricao: e.target.value })} />
+            </div>
+            <button type="submit" className="btn-secondary text-sm">+ Adicionar Prazo</button>
+          </form>
+
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {prazos.length === 0 ? <p className="text-sm text-gray-400">Nenhum prazo cadastrado.</p> : prazos.map((p) => (
+              <div key={p.id} className="rounded-lg border border-gray-200 p-2 text-sm flex items-center justify-between gap-2">
+                <div>
+                  <div className="font-medium">{p.titulo}</div>
+                  <div className="text-xs text-gray-500">{p.data ? new Date(`${p.data}T00:00:00`).toLocaleDateString("pt-BR") : "-"} {p.hora || ""}</div>
+                  <div className="text-xs text-gray-400">Lembrete: {p.alerta_dias_antes}d e {p.alerta_horas_antes}h antes</div>
+                </div>
+                {p.status !== "concluido" ? (
+                  <button onClick={() => concluirPrazo(p)} className="btn-secondary text-xs px-3 py-1">Concluir</button>
+                ) : (
+                  <span className="badge-green">Concluído</span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -380,6 +880,19 @@ export default function ProcessoDetail() {
                     <option value="">Selecione...</option>
                     {varas.map((v) => (
                       <option key={v.id} value={v.id}>{v.nome} - {v.comarca_nome || ""}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label">Tipo de Caso</label>
+                  <select
+                    className="input"
+                    value={editForm.tipo_caso}
+                    onChange={(e) => setEditForm({ ...editForm, tipo_caso: e.target.value })}
+                  >
+                    {Object.entries(TIPO_CASO_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
                     ))}
                   </select>
                 </div>

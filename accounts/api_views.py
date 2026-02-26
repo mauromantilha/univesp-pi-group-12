@@ -59,9 +59,18 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             clientes_qs = Cliente.objects.all()
             compromissos_qs = Compromisso.objects.all()
         else:
-            processos_qs = Processo.objects.filter(advogado=request.user)
-            clientes_qs = Cliente.objects.filter(processos__advogado=request.user).distinct()
-            compromissos_qs = Compromisso.objects.filter(advogado=request.user)
+            processos_qs = Processo.objects.filter(
+                Q(advogado=request.user)
+                | Q(responsaveis__usuario=request.user, responsaveis__ativo=True)
+            ).distinct()
+            clientes_qs = Cliente.objects.filter(
+                Q(processos__advogado=request.user)
+                | Q(processos__responsaveis__usuario=request.user, processos__responsaveis__ativo=True)
+            ).distinct()
+            compromissos_qs = Compromisso.objects.filter(
+                Q(advogado=request.user)
+                | Q(processo__responsaveis__usuario=request.user, processo__responsaveis__ativo=True)
+            ).distinct()
 
         total_processos = processos_qs.count()
         total_clientes = clientes_qs.count()

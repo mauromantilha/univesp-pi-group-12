@@ -12,4 +12,6 @@ class CompromissoSerializer(serializers.ModelSerializer):
         model = Compromisso
         fields = ['id', 'titulo', 'tipo', 'tipo_display', 'data', 'hora',
                   'advogado', 'advogado_nome', 'processo', 'processo_numero',
-                  'descricao', 'status', 'status_display', 'criado_em']
+                  'descricao', 'status', 'status_display',
+                  'alerta_dias_antes', 'alerta_horas_antes',
+                  'criado_em']
