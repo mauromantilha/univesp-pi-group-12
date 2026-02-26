@@ -8,14 +8,30 @@ const api = axios.create({
 });
 let isReportingFrontendError = false;
 
+function isAuthBootstrapRequest(url = "") {
+  const normalized = String(url || "");
+  return (
+    normalized.includes("/auth/login/") ||
+    normalized.includes("/auth/refresh/") ||
+    normalized.includes("/auth/logout/") ||
+    normalized.includes("/usuarios/me/")
+  );
+}
+
+function isLoginPath(pathname = "") {
+  return pathname === "/login" || pathname.startsWith("/login/") || pathname === "/accounts/login" || pathname.startsWith("/accounts/login/");
+}
+
 api.interceptors.response.use(
   (r) => r,
   async (error) => {
     const original = error.config || {};
     const requestUrl = original?.url || "";
     const status = error.response?.status;
+    const authBootstrap = isAuthBootstrapRequest(requestUrl);
+    const onLoginScreen = isLoginPath(window.location.pathname);
 
-    if (error.response?.status === 401 && !original._retry) {
+    if (status === 401 && !original._retry && !authBootstrap) {
       original._retry = true;
       try {
         await axios.post(
@@ -30,7 +46,9 @@ api.interceptors.response.use(
         );
         return api(original);
       } catch {
-        window.location.href = "/login";
+        if (!onLoginScreen) {
+          window.location.replace("/login");
+        }
       }
     }
 
